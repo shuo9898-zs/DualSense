@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <vType id="car" vClass="passenger" accel="2.9" decel="5.0" sigma="0.3" length="4.5" minGap="2.0" maxSpeed="55.0" color="1,1,0"/>
+    
+    <!-- Route从edge -1开始 -->
+    <route id="route_from_-1" edges="-1 -16 12 -3 15 14 13 -17 19 18 -2 -0 -1"/>
+    
+    <!-- Route从edge -16开始 -->
+    <route id="route_from_-16" edges="-16 12 -3 15 14 13 -17 19 18 -2 -0 -1 -16"/>
+    
+    <!-- Route从edge 15开始 -->
+    <route id="route_from_15" edges="15 14 13 -17 19 18 -2 -0 -1 -16 12 -3 15"/>
+    
+    <!-- Route从edge 14开始 -->
+    <route id="route_from_14" edges="14 13 -17 19 18 -2 -0 -1 -16 12 -3 15 14"/>
+    
+    <!-- Ego车辆路线 - 使用完整循环路线 -->
+    <route id="ego_route" edges="-0 -1 -16 12 -3 15 14 13 -17 19 18 -2 -0"/>
+    
+    <!-- Ego车辆 - 由CARLA控制，在SUMO中跟踪 -->
+    <vehicle id="ego_vehicle" type="car" route="ego_route" depart="0" departLane="best" departPos="base" departSpeed="0"/>
+    
+    <!-- 4辆车 -->
+    <vehicle id="car_1" type="car" route="route_from_-1" depart="0" departLane="best" departPos="base" departSpeed="10"/>
+    <vehicle id="car_2" type="car" route="route_from_-16" depart="2" departLane="best" departPos="base" departSpeed="10"/>
+    <vehicle id="car_3" type="car" route="route_from_15" depart="4" departLane="best" departPos="base" departSpeed="10"/>
+    <vehicle id="car_4" type="car" route="route_from_14" depart="6" departLane="best" departPos="base" departSpeed="10"/>
+</routes>

@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+data_collected/
+gaze_data/
+merged_gaze_ui/
+merged_ui/
+beam_eye_tracker_sdk/
+WindowsNoEditor/
+*.exe
+*.dll
+*.pak
+*.mp4
+*.mov
+*.MOV
+*.log

@@ -1,0 +1,9 @@
+# Dependency inventory only; not a verified environment lock.
+# CARLA Python API and vendor eye-tracking SDK must be installed separately.
+numpy
+pygame
+Pillow
+matplotlib
+psutil
+traci
+sumolib

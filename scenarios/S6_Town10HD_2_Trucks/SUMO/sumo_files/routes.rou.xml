@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <vType id="truck" vClass="truck" accel="2.0" decel="4.0" sigma="0.3" length="5.199" minGap="2.5" maxSpeed="40.0" color="0,0,1"/>
+    
+    <!-- Route从edge -4开始 -->
+    <route id="route_from_-4" edges="-4 -5 -6 -7 17 10 0 3 2 1 8 -4"/>
+    
+    <!-- Route从edge -5开始 -->
+    <route id="route_from_-5" edges="-5 -6 -7 17 10 0 3 2 1 8 -4 -5"/>
+    
+    <!-- Route从edge 3开始 -->
+    <route id="route_from_3" edges="3 2 1 8 -4 -5 -6 -7 17 10 0 3"/>
+    
+    <!-- Route从edge 2开始 -->
+    <route id="route_from_2" edges="2 1 8 -4 -5 -6 -7 17 10 0 3 2"/>
+    
+    <!-- Route从edge 1开始 -->
+    <route id="route_from_1" edges="1 8 -4 -5 -6 -7 17 10 0 3 2 1"/>
+    
+    <!-- Ego车辆路线 - 使用完整循环路线 -->
+    <route id="ego_route" edges="8 -4 -5 -6 -7 17 10 0 3 2 1 8"/>
+    
+    <!-- Ego车辆 - 由CARLA控制，在SUMO中跟踪 -->
+    <vehicle id="ego_vehicle" type="truck" route="ego_route" depart="0" departLane="best" departPos="base" departSpeed="0"/>
+    
+    <!-- 5辆卡车 -->
+    <vehicle id="truck_1" type="truck" route="route_from_-4" depart="0" departLane="best" departPos="base" departSpeed="10"/>
+    <vehicle id="truck_2" type="truck" route="route_from_-5" depart="2" departLane="best" departPos="base" departSpeed="10"/>
+    <vehicle id="truck_3" type="truck" route="route_from_3" depart="4" departLane="best" departPos="base" departSpeed="10"/>
+    <vehicle id="truck_4" type="truck" route="route_from_2" depart="6" departLane="best" departPos="base" departSpeed="10"/>
+    <vehicle id="truck_5" type="truck" route="route_from_1" depart="8" departLane="best" departPos="base" departSpeed="10"/>
+</routes>
