@@ -33,10 +33,6 @@ scenarios/
       sumo_files/                # matching network/routes/configuration
     weather/
     visualization/
-docs/
-tools/
-skills/setup/SKILL.md
-AGENTS.md
 requirements.txt
 ```
 
@@ -66,8 +62,6 @@ Collection writes timestamped files under scenario-local `data_collected/` and `
 
 Packaging validation is static only: Python syntax and resource references. Hardware, simulator startup, VR interaction and end-to-end collection have not been re-tested in this release preparation. Source-based rebuilding is a separate workflow: the Unreal Editor project is maintained elsewhere and is not included.
 
-## Agent-assisted setup
+## Third-party notes
 
-Start with [AGENTS.md](AGENTS.md), then [the setup skill](skills/setup/SKILL.md). A copyable prompt is in [docs/AGENT_PROMPT.md](docs/AGENT_PROMPT.md). Run `python tools/check_release.py` for offline packaging checks.
-
-See [runtime notes](docs/RUNTIME.md) and [third-party notes](docs/THIRD_PARTY.md). No new license grant is introduced by this update.
+CARLA/Unreal Engine, SUMO/TraCI, Pygame and Beam Eye Tracker have independent terms. Vendor SDKs and simulator binaries are excluded. Existing copyright, authorship and AI-assistance comments are retained; some scripts mention Assistant or GitHub Copilot. No repository-wide license is granted by this release. Licensing and asset redistribution require separate author review.
