@@ -1,6 +1,6 @@
 """
-修复后的Bridge Helper for CARLA-SUMO坐标转换
-完全对称的双向转换，消除累积误差
+Corrected bridge helper for CARLA-SUMO coordinate conversion
+Symmetric bidirectional conversion to avoid accumulated error
 """
 
 import carla
@@ -9,20 +9,20 @@ import math
 
 class BridgeHelper:
     """
-    静态工具类，用于CARLA和SUMO坐标系之间的精确转换
-    确保双向转换完全对称，消除累积误差
+    Static utilities for precise conversion between CARLA and SUMO coordinates
+    Keep forward and inverse conversions symmetric to avoid accumulated error.
     """
     
-    # 类属性用于缓存
+    # Class attributes used as caches
     blueprint_library = None
-    offset = (0.0, 0.0)  # 地图坐标偏移 (x, y)
+    offset = (0.0, 0.0)  # Map coordinate offset (x, y)
     
-    # 车道对齐配置
-    lateral_shift = 0.0  # 横向偏移(米)，用于对齐车道中心
+    # Lane-alignment configuration
+    lateral_shift = 0.0  # Lateral offset in meters for lane-center alignment
     
     @staticmethod
     def normalize_angle(angle):
-        """标准化角度到 [-180, 180] 范围"""
+        """Normalize an angle to [-180, 180]."""
         while angle > 180.0:
             angle -= 360.0
         while angle <= -180.0:
@@ -32,65 +32,65 @@ class BridgeHelper:
     @staticmethod
     def get_carla_transform(sumo_transform, extent):
         """
-        SUMO坐标转换为CARLA坐标
+        Convert SUMO coordinates to CARLA coordinates.
         
-        转换步骤：
-        1. 应用地图偏移
-        2. 参考点校正 (前保险杠 → 几何中心)
-        3. 应用横向偏移
-        4. 坐标系转换 (右手 → 左手，Y轴反转)
-        5. 角度转换 (SUMO角度 → CARLA角度)
+        Conversion steps:
+        1. Apply the map offset.
+        2. Shift the reference point from front bumper to geometric center.
+        3. Apply the lateral offset.
+        4. Convert right-handed to left-handed coordinates by reversing Y.
+        5. Convert SUMO angles to CARLA angles.
         
         Args:
             sumo_transform: {'location': (x, y, z), 'rotation': yaw_degrees}
-            extent: carla.Vector3D 车辆半尺寸
+            extent: Vehicle half-dimensions as carla.Vector3D
             
         Returns:
             carla.Transform
         """
-        # 提取SUMO位置和角度
+        # Extract SUMO position and heading.
         sumo_x, sumo_y = sumo_transform['location'][:2]
         sumo_z = sumo_transform['location'][2] if len(sumo_transform['location']) > 2 else 0.0
         sumo_yaw = sumo_transform['rotation']
         
-        # 步骤1: 应用地图偏移
+        # Step 1: Apply the map offset.
         x = sumo_x - BridgeHelper.offset[0]
         y = sumo_y - BridgeHelper.offset[1]
         
-        # 步骤2: 参考点校正 (前保险杠 → 几何中心)
-        # SUMO角度: 0°=北, 90°=东, 顺时针
-        # 计算朝向向量 (SUMO坐标系中)
+        # Step 2: Shift the reference from front bumper to geometric center.
+        # SUMO angles: 0 degrees north, 90 degrees east, clockwise.
+        # Calculate the heading vector in SUMO coordinates.
         yaw_rad = math.radians(sumo_yaw)
-        forward_x = math.sin(yaw_rad)  # SUMO中，sin(yaw)是X方向分量
-        forward_y = math.cos(yaw_rad)  # SUMO中，cos(yaw)是Y方向分量
+        forward_x = math.sin(yaw_rad)  # In SUMO, sin(yaw) is the X component.
+        forward_y = math.cos(yaw_rad)  # In SUMO, cos(yaw) is the Y component.
         
-        # 从前保险杠向后移动 extent.x 距离
+        # Move backward from the front bumper by extent.x.
         x = x - forward_x * extent.x
         y = y - forward_y * extent.x
         
-        # 步骤3: 应用横向偏移
+        # Step 3: Apply the lateral offset.
         if BridgeHelper.lateral_shift != 0.0:
-            # 计算垂直于前进方向的向量 (向右为正)
-            right_x = forward_y   # 垂直向量
+            # Calculate the perpendicular vector, positive to the right.
+            right_x = forward_y   # Perpendicular vector
             right_y = -forward_x
             
             x += right_x * BridgeHelper.lateral_shift
             y += right_y * BridgeHelper.lateral_shift
         
-        # 步骤4: 坐标系转换 (SUMO右手 → CARLA左手)
-        # CARLA使用左手坐标系，Y轴需要反转
+        # Step 4: Convert SUMO right-handed coordinates to CARLA left-handed coordinates.
+        # Reverse Y for CARLA's left-handed coordinate system.
         y = -y
         
-        # 确保Z坐标在地面之上
+        # Keep Z above ground level.
         z = max(sumo_z, 0.5)
         
-        # 步骤5: 角度转换 (SUMO → CARLA)
-        # SUMO: 0°=北, 90°=东, 顺时针
-        # CARLA: 0°=东, 90°=南, 逆时针
-        # 公式: carla_yaw = sumo_yaw - 90°
+        # Step 5: Convert SUMO angles to CARLA angles.
+        # SUMO: 0 degrees north, 90 degrees east, clockwise.
+        # CARLA: 0 degrees east, 90 degrees south, counterclockwise.
+        # Formula: carla_yaw = sumo_yaw - 90 degrees
         carla_yaw = BridgeHelper.normalize_angle(sumo_yaw - 90.0)
         
-        # 创建CARLA变换
+        # Create the CARLA transform.
         carla_location = carla.Location(x=x, y=y, z=z)
         carla_rotation = carla.Rotation(pitch=0.0, yaw=carla_yaw, roll=0.0)
         
@@ -99,55 +99,55 @@ class BridgeHelper:
     @staticmethod
     def get_sumo_transform(carla_transform, extent):
         """
-        CARLA坐标转换为SUMO坐标（get_carla_transform的完全逆过程）
+        Convert CARLA coordinates to SUMO, exactly reversing get_carla_transform.
         
         Args:
             carla_transform: carla.Transform
-            extent: carla.Vector3D 车辆半尺寸
+            extent: Vehicle half-dimensions as carla.Vector3D
             
         Returns:
             {'location': (x, y, z), 'rotation': yaw_degrees}
         """
-        # 提取CARLA位置和角度
+        # Extract CARLA position and heading.
         carla_x = carla_transform.location.x
         carla_y = carla_transform.location.y
         carla_z = carla_transform.location.z
         carla_yaw = carla_transform.rotation.yaw
         
-        # 逆步骤5: 角度转换 (CARLA → SUMO)
-        # 公式: sumo_yaw = carla_yaw + 90°
+        # Reverse step 5: Convert CARLA angles to SUMO angles.
+        # Formula: sumo_yaw = carla_yaw + 90 degrees
         sumo_yaw = BridgeHelper.normalize_angle(carla_yaw + 90.0)
         
-        # 逆步骤4: 坐标系转换 (CARLA左手 → SUMO右手)
+        # Reverse step 4: Convert CARLA left-handed to SUMO right-handed coordinates.
         x = carla_x
-        y = -carla_y  # Y轴反转
+        y = -carla_y  # Reverse the Y axis.
         
-        # 逆步骤3: 移除横向偏移
+        # Reverse step 3: Remove the lateral offset.
         # if BridgeHelper.lateral_shift != 0.0:
         if BridgeHelper.lateral_shift != 4.0:
-            # 计算SUMO坐标系中的朝向向量
+            # Calculate the heading vector in SUMO coordinates.
             yaw_rad = math.radians(sumo_yaw)
             forward_x = math.sin(yaw_rad)
             forward_y = math.cos(yaw_rad)
             
-            # 计算右向量
+            # Calculate the rightward vector.
             right_x = forward_y
             right_y = -forward_x
             
-            # 移除横向偏移
+            # Remove the lateral offset.
             x -= right_x * BridgeHelper.lateral_shift
             y -= right_y * BridgeHelper.lateral_shift
         
-        # 逆步骤2: 移除参考点校正 (几何中心 → 前保险杠)
+        # Reverse step 2: Shift the reference from geometric center to front bumper.
         yaw_rad = math.radians(sumo_yaw)
         forward_x = math.sin(yaw_rad)
         forward_y = math.cos(yaw_rad)
         
-        # 从几何中心向前移动 extent.x 距离
+        # Move forward from the geometric center by extent.x.
         x = x + forward_x * extent.x
         y = y + forward_y * extent.x
         
-        # 逆步骤1: 移除地图偏移
+        # Reverse step 1: Remove the map offset.
         x = x + BridgeHelper.offset[0]
         y = y + BridgeHelper.offset[1]
         
@@ -159,19 +159,19 @@ class BridgeHelper:
     @staticmethod
     def get_carla_blueprint(sumo_actor_type, sync_color=False):
         """
-        将SUMO车辆类型映射到CARLA蓝图
+        Map a SUMO vehicle type to a CARLA blueprint.
         
         Args:
-            sumo_actor_type: SUMO车辆类型字符串
-            sync_color: 是否同步车辆颜色
+            sumo_actor_type: SUMO vehicle-type string
+            sync_color: Whether to synchronize vehicle color
             
         Returns:
-            carla.ActorBlueprint 或 None
+            carla.ActorBlueprint or None
         """
         if BridgeHelper.blueprint_library is None:
             return None
         
-        # SUMO车辆类型到CARLA蓝图的映射
+        # Mapping from SUMO vehicle types to CARLA blueprints
         type_mapping = {
             'passenger': 'vehicle.audi.tt',
             'truck': 'vehicle.audi.tt',
@@ -184,24 +184,24 @@ class BridgeHelper:
             'delivery': 'vehicle.audi.tt',
         }
         
-        # 默认使用passenger车型
+        # Default to the passenger vehicle type.
         blueprint_name = type_mapping.get(sumo_actor_type, 'vehicle.audi.tt')
         
         try:
             blueprint = BridgeHelper.blueprint_library.find(blueprint_name)
             
-            # 设置角色名用于识别
+            # Set the role name for identification.
             if blueprint.has_attribute('role_name'):
                 blueprint.set_attribute('role_name', 'sumo_vehicle')
             
-            # 禁用自动驾驶
+            # Disable autopilot.
             if blueprint.has_attribute('driver_id'):
                 blueprint.set_attribute('driver_id', '0')
             
             return blueprint
             
         except Exception:
-            # 找不到特定蓝图时回退到任意车辆
+            # Fall back to any vehicle if the requested blueprint is unavailable.
             vehicles = BridgeHelper.blueprint_library.filter('vehicle.*')
             if vehicles:
                 blueprint = vehicles[0]
@@ -214,39 +214,39 @@ class BridgeHelper:
     @staticmethod
     def get_carla_lights_state(carla_lights, sumo_signals):
         """
-        将SUMO信号位掩码转换为CARLA车辆灯光状态
+        Convert a SUMO signal bitmask to CARLA vehicle-light state.
         
         Args:
-            carla_lights: 当前carla.VehicleLightState
-            sumo_signals: SUMO信号整数位掩码
+            carla_lights: Current carla.VehicleLightState
+            sumo_signals: SUMO integer signal bitmask
             
         Returns:
             carla.VehicleLightState
         """
-        # 从当前灯光状态开始或创建新状态
+        # Start from the current light state or create a new state.
         if carla_lights is None:
             lights = carla.VehicleLightState.NONE
         else:
             lights = carla_lights
         
-        # 映射SUMO信号到CARLA灯光
-        if sumo_signals & (1 << 0):  # 右转向灯
+        # Map SUMO signals to CARLA lights.
+        if sumo_signals & (1 << 0):  # Right turn signal
             lights |= carla.VehicleLightState.RightBlinker
-        if sumo_signals & (1 << 1):  # 左转向灯
+        if sumo_signals & (1 << 1):  # Left turn signal
             lights |= carla.VehicleLightState.LeftBlinker
-        if sumo_signals & (1 << 3):  # 制动灯
+        if sumo_signals & (1 << 3):  # Brake lights
             lights |= carla.VehicleLightState.Brake
-        if sumo_signals & (1 << 4):  # 前灯
+        if sumo_signals & (1 << 4):  # Headlights
             lights |= carla.VehicleLightState.LowBeam
-        if sumo_signals & (1 << 5):  # 雾灯
+        if sumo_signals & (1 << 5):  # Fog lights
             lights |= carla.VehicleLightState.Fog
-        if sumo_signals & (1 << 6):  # 远光灯
+        if sumo_signals & (1 << 6):  # High beams
             lights |= carla.VehicleLightState.HighBeam
-        if sumo_signals & (1 << 7):  # 倒车灯
+        if sumo_signals & (1 << 7):  # Reverse lights
             lights |= carla.VehicleLightState.Reverse
-        if sumo_signals & (1 << 11):  # 蓝色应急灯
+        if sumo_signals & (1 << 11):  # Blue emergency lights
             lights |= carla.VehicleLightState.Special1
-        if sumo_signals & (1 << 12):  # 红色应急灯
+        if sumo_signals & (1 << 12):  # Red emergency lights
             lights |= carla.VehicleLightState.Special2
         
         return lights
@@ -254,18 +254,18 @@ class BridgeHelper:
     @staticmethod
     def get_sumo_lights_state(sumo_signals, carla_lights):
         """
-        将CARLA车辆灯光转换为SUMO信号位掩码
+        Convert CARLA vehicle lights to a SUMO signal bitmask.
         
         Args:
-            sumo_signals: 当前SUMO信号位掩码
+            sumo_signals: Current SUMO signal bitmask
             carla_lights: carla.VehicleLightState
             
         Returns:
-            整数位掩码用于SUMO信号
+            Integer bitmask representing SUMO signals
         """
         signals = sumo_signals
         
-        # 映射CARLA灯光到SUMO信号
+        # Map CARLA lights to SUMO signals.
         if carla_lights & carla.VehicleLightState.RightBlinker:
             signals |= (1 << 0)
         if carla_lights & carla.VehicleLightState.LeftBlinker:

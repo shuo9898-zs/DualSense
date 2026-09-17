@@ -1,6 +1,6 @@
 """
-CARLA性能监控工具 - 实时监控UI录制对FPS的影响
-用于验证优化效果和诊断性能问题
+CARLA performance monitoring: real-time FPS impact of UI recording
+Validate optimizations and diagnose performance issues.
 """
 
 import time
@@ -10,75 +10,75 @@ from typing import Dict, Optional
 
 
 class PerformanceMonitor:
-    """性能监控器 - 监控CARLA主循环性能"""
+    """Monitor CARLA main-loop performance."""
     
     def __init__(self, window_size=100):
         """
-        初始化性能监控器
+        Initialize the performance monitor.
         
         Args:
-            window_size: 滑动窗口大小 (帧数)
+            window_size: Sliding-window length in frames
         """
         self.window_size = window_size
         
-        # 性能数据缓冲区
+        # Performance-data buffers
         self.frame_times = deque(maxlen=window_size)
         self.render_times = deque(maxlen=window_size)
         self.ui_capture_times = deque(maxlen=window_size)
         
-        # 时间戳记录
+        # Timestamp records
         self.frame_start_time = 0
         self.render_start_time = 0
         self.ui_capture_start_time = 0
         
-        # 统计数据
+        # Statistics
         self.total_frames = 0
         self.start_time = time.time()
         
-        # UI录制状态
+        # UI recording status
         self.ui_recording = False
         self.ui_queue_size = 0
         
 
     
     def start_frame(self):
-        """标记帧开始"""
+        """Mark the start of a frame."""
         self.frame_start_time = time.time()
     
     def end_frame(self):
-        """标记帧结束"""
+        """Mark the end of a frame."""
         if self.frame_start_time > 0:
             frame_time = time.time() - self.frame_start_time
-            self.frame_times.append(frame_time * 1000)  # 转换为毫秒
+            self.frame_times.append(frame_time * 1000)  # Convert to milliseconds.
             self.total_frames += 1
     
     def start_render(self):
-        """标记渲染开始"""
+        """Mark the start of rendering."""
         self.render_start_time = time.time()
     
     def end_render(self):
-        """标记渲染结束"""
+        """Mark the end of rendering."""
         if self.render_start_time > 0:
             render_time = time.time() - self.render_start_time
-            self.render_times.append(render_time * 1000)  # 转换为毫秒
+            self.render_times.append(render_time * 1000)  # Convert to milliseconds.
     
     def start_ui_capture(self):
-        """标记UI捕获开始"""
+        """Mark the start of UI capture."""
         self.ui_capture_start_time = time.time()
     
     def end_ui_capture(self):
-        """标记UI捕获结束"""
+        """Mark the end of UI capture."""
         if self.ui_capture_start_time > 0:
             ui_time = time.time() - self.ui_capture_start_time
-            self.ui_capture_times.append(ui_time * 1000)  # 转换为毫秒
+            self.ui_capture_times.append(ui_time * 1000)  # Convert to milliseconds.
     
     def update_ui_status(self, recording: bool, queue_size: int):
-        """更新UI录制状态"""
+        """Update UI recording status."""
         self.ui_recording = recording
         self.ui_queue_size = queue_size
     
     def get_stats(self) -> Dict:
-        """获取性能统计信息"""
+        """Get performance statistics."""
         current_time = time.time()
         runtime = current_time - self.start_time
         
@@ -90,7 +90,7 @@ class PerformanceMonitor:
             'ui_queue_size': self.ui_queue_size
         }
         
-        # 计算近期FPS (基于frame_times)
+        # Calculate recent FPS from frame_times.
         if len(self.frame_times) > 10:
             recent_avg_frame_time = sum(list(self.frame_times)[-30:]) / min(30, len(self.frame_times))
             stats['recent_fps'] = 1000 / recent_avg_frame_time if recent_avg_frame_time > 0 else 0
@@ -99,7 +99,7 @@ class PerformanceMonitor:
             stats['recent_fps'] = 0
             stats['avg_frame_time_ms'] = 0
         
-        # 渲染时间统计
+        # Rendering-time statistics
         if len(self.render_times) > 0:
             stats['avg_render_time_ms'] = sum(self.render_times) / len(self.render_times)
             stats['max_render_time_ms'] = max(self.render_times)
@@ -107,7 +107,7 @@ class PerformanceMonitor:
             stats['avg_render_time_ms'] = 0
             stats['max_render_time_ms'] = 0
         
-        # UI捕获时间统计
+        # UI capture-time statistics
         if len(self.ui_capture_times) > 0:
             stats['avg_ui_capture_ms'] = sum(self.ui_capture_times) / len(self.ui_capture_times)
             stats['max_ui_capture_ms'] = max(self.ui_capture_times)
@@ -120,7 +120,7 @@ class PerformanceMonitor:
         return stats
     
     def print_stats(self):
-        """打印性能统计信息"""
+        """Print performance statistics."""
         stats = self.get_stats()
         
         print(f"\n📊 性能监控报告:")
@@ -145,20 +145,20 @@ class PerformanceMonitor:
             print(f"\n🎬 UI录制: 关闭")
     
     def get_performance_impact(self) -> Dict:
-        """分析UI录制的性能影响"""
+        """Analyze the performance impact of UI recording."""
         if not self.ui_recording or len(self.ui_capture_times) == 0:
             return {'impact': 0, 'description': 'UI录制未开启'}
         
         stats = self.get_stats()
         
-        # 计算UI捕获时间占总帧时间的百分比
+        # Calculate UI capture time as a percentage of total frame time.
         if stats['avg_frame_time_ms'] > 0:
             ui_impact_percent = (stats['avg_ui_capture_ms'] / stats['avg_frame_time_ms']) * 100
         else:
             ui_impact_percent = 0
         
-        # 估算FPS影响
-        baseline_fps = 35  # 目标FPS
+        # Estimate the FPS impact.
+        baseline_fps = 35  # Target FPS
         current_fps = stats['recent_fps']
         fps_loss = baseline_fps - current_fps
         fps_loss_percent = (fps_loss / baseline_fps) * 100 if baseline_fps > 0 else 0
@@ -173,12 +173,12 @@ class PerformanceMonitor:
         }
 
 
-# 全局性能监控实例
+# Global performance-monitor instance
 _global_monitor: Optional[PerformanceMonitor] = None
 
 
 def get_performance_monitor() -> PerformanceMonitor:
-    """获取全局性能监控器实例"""
+    """Get the global performance monitor."""
     global _global_monitor
     if _global_monitor is None:
         _global_monitor = PerformanceMonitor()
@@ -186,7 +186,7 @@ def get_performance_monitor() -> PerformanceMonitor:
 
 
 def start_performance_reporting(interval_seconds=10):
-    """启动性能报告线程"""
+    """Start the performance-reporting thread."""
     monitor = get_performance_monitor()
     
     def report_loop():
@@ -194,9 +194,9 @@ def start_performance_reporting(interval_seconds=10):
             time.sleep(interval_seconds)
             monitor.print_stats()
             
-            # 性能影响分析
+            # Analyze performance impact.
             impact = monitor.get_performance_impact()
-            if impact['fps_loss_percent'] > 10:  # FPS损失超过10%
+            if impact['fps_loss_percent'] > 10:  # FPS loss exceeds 10%.
                 print(f"⚠️ 性能警告: {impact['description']}")
     
     thread = threading.Thread(target=report_loop, daemon=True)
@@ -205,27 +205,27 @@ def start_performance_reporting(interval_seconds=10):
 
 
 if __name__ == "__main__":
-    # 测试性能监控器
+    # Test the performance monitor.
     monitor = PerformanceMonitor()
     
-    # 模拟一些性能数据
+    # Simulate performance data.
     for i in range(100):
         monitor.start_frame()
-        time.sleep(0.02)  # 模拟20ms帧时间
+        time.sleep(0.02)  # Simulate a 20 ms frame time.
         
         monitor.start_render()
-        time.sleep(0.015)  # 模拟15ms渲染时间
+        time.sleep(0.015)  # Simulate a 15 ms rendering time.
         monitor.end_render()
         
-        if i % 3 == 0:  # 模拟15Hz UI捕获
+        if i % 3 == 0:  # Simulate UI capture at 15 Hz.
             monitor.start_ui_capture()
-            time.sleep(0.002)  # 模拟2ms捕获时间
+            time.sleep(0.002)  # Simulate a 2 ms capture time.
             monitor.end_ui_capture()
             monitor.update_ui_status(True, 5)
         
         monitor.end_frame()
     
-    # 显示统计
+    # Display statistics.
     monitor.print_stats()
     impact = monitor.get_performance_impact()
     print(f"\n性能影响: {impact}")

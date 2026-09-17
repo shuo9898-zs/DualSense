@@ -1,6 +1,6 @@
 """
-合并眼动数据和驾驶UI截图
-根据时间戳匹配最近的截图，并在图上标注 gaze 点
+Merge gaze data with driving UI screenshots.
+Match the nearest screenshot by timestamp and overlay the gaze point.
 
 Author: Anonymous contributors
 Date: October 29, 2025
@@ -15,7 +15,7 @@ from typing import List, Tuple, Optional
 
 
 class GazeUImerger:
-    """合并眼动数据和UI截图"""
+    """Merge gaze data and UI screenshots."""
     
     def __init__(self, gaze_csv_path: str, ui_folder_path: str, output_folder: str):
         self.gaze_csv_path = gaze_csv_path
@@ -26,7 +26,7 @@ class GazeUImerger:
         self.ui_images = []
         
     def load_gaze_data(self) -> bool:
-        """读取 gaze CSV 数据"""
+        """Read gaze CSV data."""
         print("\n📊 读取眼动数据...")
         
         try:
@@ -40,15 +40,15 @@ class GazeUImerger:
                 print("   ❌ 没有数据")
                 return False
             
-            # 打印CSV列名以便调试
+            # Print CSV column names for debugging.
             first_row = self.gaze_data[0]
             print(f"   📋 CSV列名: {list(first_row.keys())}")
             
-            # 自动检测时间戳列名并处理格式
+            # Detect the timestamp column and handle its format automatically.
             timestamp_col = None
             if 'pc_timestamp_str' in first_row:
                 timestamp_col = 'pc_timestamp_str'
-                # 转换字符串时间戳为数值时间戳
+                # Convert string timestamps to numeric timestamps.
                 import datetime
                 for row in self.gaze_data:
                     dt_str = row['pc_timestamp_str']
@@ -81,7 +81,7 @@ class GazeUImerger:
             return False
     
     def load_ui_images(self) -> bool:
-        """读取 UI 截图列表"""
+        """Read the list of UI screenshots."""
         print("\n🖼️  读取驾驶UI截图...")
         
         try:
@@ -95,17 +95,17 @@ class GazeUImerger:
             for img_path in ui_files:
                 filename = img_path.stem
                 
-                # 解析时间戳：frame_000000_1761771885410
-                # 取最后一个下划线后的数字
+                # Parse a timestamp from frame_000000_1761771885410.
+                # Take the number after the final underscore.
                 parts = filename.split("_")
                 timestamp_str = parts[-1]
                 
                 try:
                     timestamp_ms = float(timestamp_str)
                     
-                    # 检测单位：如果值很大（> 1e10），说明是毫秒
+                    # Detect units: values above 1e10 indicate milliseconds.
                     if timestamp_ms > 1e10:
-                        timestamp = timestamp_ms / 1000.0  # 转换为秒
+                        timestamp = timestamp_ms / 1000.0  # Convert to seconds.
                     else:
                         timestamp = timestamp_ms
                     
@@ -139,12 +139,12 @@ class GazeUImerger:
     
     def find_nearest_ui(self, gaze_timestamp: float) -> Optional[dict]:
         """
-        找到时间最近的UI截图（使用二分查找优化）
+        Find the temporally nearest UI screenshot using binary search.
         """
         if not self.ui_images:
             return None
         
-        # 使用二分查找
+        # Use binary search.
         left, right = 0, len(self.ui_images) - 1
         min_diff = float('inf')
         nearest = None
@@ -163,11 +163,11 @@ class GazeUImerger:
             else:
                 right = mid - 1
         
-        # 检查相邻位置
+        # Check adjacent positions.
         if nearest:
             idx = self.ui_images.index(nearest)
             
-            # 检查前一个
+            # Check the preceding item.
             if idx > 0:
                 prev = self.ui_images[idx - 1]
                 prev_diff = abs(prev['timestamp'] - gaze_timestamp)
@@ -175,7 +175,7 @@ class GazeUImerger:
                     min_diff = prev_diff
                     nearest = prev
             
-            # 检查后一个
+            # Check the following item.
             if idx < len(self.ui_images) - 1:
                 next_img = self.ui_images[idx + 1]
                 next_diff = abs(next_img['timestamp'] - gaze_timestamp)
@@ -187,22 +187,22 @@ class GazeUImerger:
     
     def draw_gaze_point(self, img: np.ndarray, gaze_x: float, gaze_y: float, 
                        confidence: str, timestamp: float) -> np.ndarray:
-        """在图像上绘制 gaze 点"""
+        """Draw a gaze point on the image."""
         img = img.copy()
         h, w = img.shape[:2]
         
-        # 坐标缩放
+        # Scale coordinates.
         scale_x = w / 1920.0
         scale_y = h / 1080.0
         
         x = int(gaze_x * scale_x)
         y = int(gaze_y * scale_y)
         
-        # 边界检查
+        # Check bounds.
         x = max(0, min(x, w - 1))
         y = max(0, min(y, h - 1))
         
-        # 根据置信度选择颜色和大小
+        # Choose color and size based on confidence.
         if confidence == "high":
             color = (0, 255, 0)
             radius = 15
@@ -220,18 +220,18 @@ class GazeUImerger:
             radius = 8
             thickness = 1
         
-        # 绘制十字准星
+        # Draw a crosshair.
         line_len = radius + 5
         cv2.line(img, (x - line_len, y), (x - radius, y), color, thickness)
         cv2.line(img, (x + radius, y), (x + line_len, y), color, thickness)
         cv2.line(img, (x, y - line_len), (x, y - radius), color, thickness)
         cv2.line(img, (x, y + radius), (x, y + line_len), color, thickness)
         
-        # 绘制圆圈
+        # Draw a circle.
         cv2.circle(img, (x, y), radius, color, thickness)
         cv2.circle(img, (x, y), 2, color, -1)
         
-        # 文字标注
+        # Text annotation
         font = cv2.FONT_HERSHEY_SIMPLEX
         text_pos = (x + 20, y - 20)
         cv2.putText(img, confidence, text_pos, font, 0.5, color, 1)
@@ -240,10 +240,10 @@ class GazeUImerger:
     
     def merge(self, max_time_diff: float = 5.0):
         """
-        执行合并
+        Perform the merge.
         
         Args:
-            max_time_diff: 最大时间差（秒），超过此值则跳过
+            max_time_diff: Maximum time difference in seconds; skip larger offsets
         """
         print("\n🔄 开始合并...")
         print(f"   最大时间差: {max_time_diff} 秒")
@@ -251,7 +251,7 @@ class GazeUImerger:
         
         os.makedirs(self.output_folder, exist_ok=True)
         
-        # 创建日志文件
+        # Create the log file.
         log_path = os.path.join(self.output_folder, "merge_log.txt")
         log_file = open(log_path, 'w', encoding='utf-8')
         log_file.write("gaze_timestamp,gaze_x,gaze_y,confidence,ui_image,ui_timestamp,time_diff\n")
@@ -269,7 +269,7 @@ class GazeUImerger:
                 gaze_y = float(gaze['gaze_y'])
                 confidence = gaze['confidence']
                 
-                # 找到最近的UI截图
+                # Find the nearest UI screenshot.
                 nearest_ui = self.find_nearest_ui(gaze_ts)
                 
                 if nearest_ui is None:
@@ -278,26 +278,26 @@ class GazeUImerger:
                 
                 time_diff = abs(nearest_ui['timestamp'] - gaze_ts)
                 
-                # 时间差太大，跳过
+                # Skip if the time difference is too large.
                 if time_diff > max_time_diff:
                     skipped += 1
                     continue
                 
-                # 读取UI图像
+                # Read the UI image.
                 img = cv2.imread(nearest_ui['path'])
                 if img is None:
                     skipped += 1
                     continue
                 
-                # 绘制 gaze 点
+                # Draw the gaze point.
                 img_with_gaze = self.draw_gaze_point(img, gaze_x, gaze_y, confidence, gaze_ts)
                 
-                # 保存
+                # Save.
                 output_filename = f"merged_{gaze_ts:.6f}.jpg"
                 output_path = os.path.join(self.output_folder, output_filename)
                 cv2.imwrite(output_path, img_with_gaze, [cv2.IMWRITE_JPEG_QUALITY, 95])
                 
-                # 记录日志
+                # Write a log entry.
                 log_file.write(f"{gaze_ts:.6f},{gaze_x:.1f},{gaze_y:.1f},{confidence},"
                               f"{os.path.basename(nearest_ui['path'])},"
                               f"{nearest_ui['timestamp']:.6f},{time_diff:.4f}\n")
@@ -305,7 +305,7 @@ class GazeUImerger:
                 time_diffs.append(time_diff)
                 matched += 1
                 
-                # 进度显示
+                # Display progress.
                 if (idx + 1) % 100 == 0 or (idx + 1) == total:
                     progress = (idx + 1) / total * 100
                     print(f"   进度: {idx + 1}/{total} ({progress:.1f}%) - "
@@ -318,7 +318,7 @@ class GazeUImerger:
         
         log_file.close()
         
-        # 统计时间差
+        # Summarize time differences.
         if time_diffs:
             avg_diff = sum(time_diffs) / len(time_diffs)
             max_diff = max(time_diffs)
@@ -343,12 +343,12 @@ class GazeUImerger:
 
 
 def main():
-    """主函数"""
+    """Main entry point."""
     print("="*60)
     print("🎯 Gaze + Driving UI 合并工具")
     print("="*60)
     
-    # 路径配置
+    # Path configuration
     gaze_csv = r"C:\Users\USER\Desktop\CARLA_package\py code\35fps_Stable_Version\gaze_data\gaze_data_2025-11-21_16-40-39\gaze_data.csv"
     ui_folder = r"C:\Users\USER\Desktop\CARLA_package\py code\35fps_Stable_Version\data_collected\carla_data_2025-11-21_16-40-39\driving_ui"
     output_folder = r"C:\Users\USER\Desktop\CARLA_package\py code\35fps_Stable_Version\merged_gaze_ui"
@@ -374,7 +374,7 @@ def main():
     if not merger.load_ui_images():
         return
     
-    # 执行合并（允许最大 5 秒时间差）
+    # Merge with a maximum time difference of 5 seconds.
     merger.merge(max_time_diff=1.0)
 
 

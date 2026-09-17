@@ -1,7 +1,7 @@
 """
-Gaze-UI对齐分析工具
-处理30Hz gaze数据与10Hz UI图像的时间同步和坐标对齐
-手动指定data_collected下的文件夹名称进行分析
+Gaze-UI alignment analysis tool
+Synchronize timestamps and coordinates for 30 Hz gaze and 10 Hz UI images.
+Select a folder under data_collected for analysis.
 """
 
 import os
@@ -16,36 +16,36 @@ import numpy as np
 
 
 class GazeUIAligner:
-    """Gaze数据与UI图像对齐分析器"""
+    """Gaze-data and UI-image alignment analyzer"""
     
     def __init__(self, data_path: str, window_ms: int = 50):
         """
-        初始化对齐器
+        Initialize the aligner.
         
         Args:
-            data_path: 数据文件夹的完整路径
-                      例如: C:\\Users\\USER\\Desktop\\CARLA_package\\py code\\35fps_Stable_Version\\data_collected\\carla_data_2025-10-17_23-03-08
-            window_ms: 时间窗口大小(毫秒)，±window_ms匹配UI帧
+            data_path: Absolute data-folder path
+                      Example: C:/data/data_collected/carla_data_2025-10-17_23-03-08
+            window_ms: Time-window half-width in milliseconds for UI-frame matching
         """
-        # 使用完整路径
+        # Use the absolute path.
         self.data_folder = os.path.abspath(data_path)
         self.window_ms = window_ms
         
-        # 检查文件夹是否存在
+        # Check whether the folder exists.
         if not os.path.exists(self.data_folder):
             raise FileNotFoundError(f"❌ 数据文件夹不存在: {self.data_folder}")
         
-        # 文件路径
+        # File paths
         self.gaze_file = os.path.join(self.data_folder, 'gaze_data.csv')
         self.ui_folder = os.path.join(self.data_folder, 'driving_ui')
         self.output_folder = os.path.join(self.data_folder, 'gaze_ui_analysis')
         
-        # 数据容器
+        # Data containers
         self.gaze_data = []
         self.ui_frames = []
         self.aligned_data = []
         
-        # 创建输出文件夹
+        # Create the output folder.
         os.makedirs(self.output_folder, exist_ok=True)
         
         print(f"🎯 初始化Gaze-UI对齐分析器")
@@ -54,9 +54,9 @@ class GazeUIAligner:
         print(f"   输出文件夹: {self.output_folder}")
     
     def load_data(self) -> bool:
-        """加载gaze数据和UI图像信息"""
+        """Load gaze data and UI image information."""
         
-        # 1. 加载gaze数据
+        # 1. Load gaze data.
         if not os.path.exists(self.gaze_file):
             print(f"❌ 未找到gaze数据文件: {self.gaze_file}")
             return False
@@ -79,7 +79,7 @@ class GazeUIAligner:
         
         print(f"   ✅ 加载 {len(self.gaze_data)} 条gaze数据")
         
-        # 2. 加载UI图像信息
+        # 2. Load UI image information.
         if not os.path.exists(self.ui_folder):
             print(f"❌ 未找到UI图像文件夹: {self.ui_folder}")
             return False
@@ -90,7 +90,7 @@ class GazeUIAligner:
         
         for file_path in ui_files:
             filename = os.path.basename(file_path)
-            # 从文件名提取时间戳: frame_000001_1760753777408.jpg
+            # Extract timestamps from filenames such as frame_000001_1760753777408.jpg.
             try:
                 parts = filename.split('_')
                 frame_id = int(parts[1])
@@ -105,7 +105,7 @@ class GazeUIAligner:
             except (IndexError, ValueError):
                 print(f"⚠️ 无法解析文件名: {filename}")
         
-        # 按时间戳排序
+        # Sort by timestamp.
         self.ui_frames.sort(key=lambda x: x['timestamp_ms'])
         print(f"   ✅ 找到 {len(self.ui_frames)} 张UI图像")
         
@@ -116,7 +116,7 @@ class GazeUIAligner:
         return True
     
     def align_data(self):
-        """执行时间窗口对齐匹配"""
+        """Match data within time windows."""
         print(f"🔄 开始时间窗口对齐匹配...")
         
         self.aligned_data = []
@@ -124,41 +124,41 @@ class GazeUIAligner:
         for ui_frame in self.ui_frames:
             ui_timestamp = ui_frame['timestamp_ms']
             
-            # 定义时间窗口
+            # Define the time window.
             window_start = ui_timestamp - self.window_ms
             window_end = ui_timestamp + self.window_ms
             
-            # 找到时间窗口内的所有gaze点
+            # Find all gaze points within the window.
             gaze_in_window = []
             for gaze_point in self.gaze_data:
                 if window_start <= gaze_point['timestamp_ms'] <= window_end:
                     gaze_in_window.append(gaze_point)
             
             if len(gaze_in_window) > 0:
-                # 计算窗口内gaze点的统计信息
+                # Calculate gaze statistics within the window.
                 gaze_x_values = [g['gaze_x'] for g in gaze_in_window]
                 gaze_y_values = [g['gaze_y'] for g in gaze_in_window]
                 
-                # 获取原始屏幕尺寸 (从第一个gaze点)
+                # Get the original screen dimensions from the first gaze sample.
                 original_width = gaze_in_window[0]['screen_width']
                 original_height = gaze_in_window[0]['screen_height']
                 
-                # 计算图像缩放比例
+                # Calculate the image scale factor.
                 try:
                     with Image.open(ui_frame['filepath']) as img:
                         img_width, img_height = img.size
                 except:
-                    # 默认假设0.2倍缩放
+                    # Assume a 0.2 scale factor by default.
                     img_width, img_height = 384, 216
                 
                 scale_x = img_width / original_width
                 scale_y = img_height / original_height
                 
-                # 映射gaze坐标到图像坐标
+                # Map gaze coordinates to image coordinates.
                 mapped_x = [x * scale_x for x in gaze_x_values]
                 mapped_y = [y * scale_y for y in gaze_y_values]
                 
-                # 计算置信度分布
+                # Calculate the confidence distribution.
                 confidence_counts = {}
                 for g in gaze_in_window:
                     conf = g['confidence']
@@ -190,13 +190,13 @@ class GazeUIAligner:
             print(f"   平均每帧匹配 {avg_gaze_per_frame:.1f} 个gaze点")
     
     def generate_heatmap_overlay(self, sample_frames: int = 5) -> str:
-        """生成热力图叠加可视化"""
+        """Generate heatmap overlay visualizations."""
         print(f"🎨 生成热力图叠加图...")
         
         if len(self.aligned_data) == 0:
             return "❌ 无对齐数据"
         
-        # 选择几个代表性帧
+        # Select representative frames.
         frame_count = min(sample_frames, len(self.aligned_data))
         frame_indices = np.linspace(0, len(self.aligned_data)-1, frame_count, dtype=int)
         
@@ -207,25 +207,25 @@ class GazeUIAligner:
         for i, frame_idx in enumerate(frame_indices):
             aligned_frame = self.aligned_data[frame_idx]
             
-            # 加载UI图像
+            # Load the UI image.
             try:
                 ui_image = Image.open(aligned_frame['ui_frame']['filepath'])
                 axes[i].imshow(ui_image)
                 
-                # 叠加gaze点
+                # Overlay gaze points.
                 mapped_x = aligned_frame['mapped_x']
                 mapped_y = aligned_frame['mapped_y']
                 
-                # 绘制individual gaze点
+                # Draw individual gaze points.
                 axes[i].scatter(mapped_x, mapped_y, 
                               c='red', s=30, alpha=0.6, marker='o')
                 
-                # 绘制平均注视点
+                # Draw the mean gaze point.
                 axes[i].scatter(aligned_frame['avg_mapped_x'], 
                               aligned_frame['avg_mapped_y'],
                               c='yellow', s=100, marker='x', linewidths=3)
                 
-                # 绘制标准差圆圈 (如果有足够的数据点)
+                # Draw a standard-deviation circle when enough samples are available.
                 if aligned_frame['std_gaze_x'] > 0:
                     circle = patches.Circle((aligned_frame['avg_mapped_x'], 
                                            aligned_frame['avg_mapped_y']),
@@ -251,7 +251,7 @@ class GazeUIAligner:
         return output_path
     
     def generate_alignment_report(self) -> str:
-        """生成对齐质量报告"""
+        """Generate an alignment-quality report."""
         print(f"📋 生成对齐质量报告...")
         
         report_path = os.path.join(self.output_folder, 'alignment_report.txt')
@@ -260,7 +260,7 @@ class GazeUIAligner:
             f.write("🎯 Gaze-UI对齐分析报告\n")
             f.write("=" * 50 + "\n\n")
             
-            # 基础统计
+            # Basic statistics
             f.write("📊 数据概况:\n")
             f.write(f"   Gaze数据点: {len(self.gaze_data)} 个\n")
             f.write(f"   UI图像: {len(self.ui_frames)} 张\n")
@@ -268,7 +268,7 @@ class GazeUIAligner:
             if len(self.ui_frames) > 0:
                 f.write(f"   对齐成功率: {len(self.aligned_data)/len(self.ui_frames)*100:.1f}%\n\n")
             
-            # 时间范围
+            # Time range
             if self.gaze_data and self.ui_frames:
                 gaze_start = min(g['timestamp_ms'] for g in self.gaze_data)
                 gaze_end = max(g['timestamp_ms'] for g in self.gaze_data)
@@ -280,7 +280,7 @@ class GazeUIAligner:
                 f.write(f"   UI图像: {ui_start} - {ui_end} ({(ui_end-ui_start)/1000:.1f}秒)\n")
                 f.write(f"   重叠区间: {max(gaze_start, ui_start)} - {min(gaze_end, ui_end)}\n\n")
             
-            # 匹配质量统计
+            # Match-quality statistics
             if self.aligned_data:
                 gaze_counts = [d['gaze_count'] for d in self.aligned_data]
                 
@@ -289,7 +289,7 @@ class GazeUIAligner:
                 f.write(f"   gaze点数范围: {min(gaze_counts)} - {max(gaze_counts)}\n")
                 f.write(f"   标准差: {np.std(gaze_counts):.1f}\n\n")
                 
-                # 置信度分布
+                # Confidence distribution
                 all_confidences = {}
                 for aligned in self.aligned_data:
                     for conf, count in aligned['confidence_dist'].items():
@@ -302,7 +302,7 @@ class GazeUIAligner:
                     f.write(f"   {conf}: {count} ({percentage:.1f}%)\n")
                 f.write("\n")
                 
-                # 坐标映射信息
+                # Coordinate-mapping information
                 if self.aligned_data:
                     first_aligned = self.aligned_data[0]
                     f.write("📐 坐标映射:\n")
@@ -314,7 +314,7 @@ class GazeUIAligner:
         return report_path
     
     def save_aligned_data(self) -> str:
-        """保存对齐后的数据到CSV"""
+        """Save aligned data to CSV."""
         print(f"💾 保存对齐数据...")
         
         csv_path = os.path.join(self.output_folder, 'aligned_gaze_ui_data.csv')
@@ -322,7 +322,7 @@ class GazeUIAligner:
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             
-            # 写入标题行
+            # Write the header row.
             writer.writerow([
                 'ui_frame_id', 'ui_timestamp_ms', 'ui_filename',
                 'gaze_count', 'avg_gaze_x', 'avg_gaze_y', 
@@ -333,7 +333,7 @@ class GazeUIAligner:
                 'window_start', 'window_end'
             ])
             
-            # 写入数据行
+            # Write data rows.
             for aligned in self.aligned_data:
                 ui_frame = aligned['ui_frame']
                 conf_dist = aligned['confidence_dist']
@@ -362,27 +362,27 @@ class GazeUIAligner:
         return csv_path
     
     def run_full_analysis(self) -> Dict[str, str]:
-        """运行完整的对齐分析"""
+        """Run the complete alignment analysis."""
         print(f"🚀 开始完整Gaze-UI对齐分析...")
         start_time = time.time()
         
-        # 1. 加载数据
+        # 1. Load data.
         if not self.load_data():
             return {"error": "数据加载失败"}
         
-        # 2. 对齐数据
+        # 2. Align data.
         self.align_data()
         
         if len(self.aligned_data) == 0:
             return {"error": "无法对齐任何数据"}
         
-        # 3. 生成可视化
+        # 3. Generate visualizations.
         heatmap_path = self.generate_heatmap_overlay()
         
-        # 4. 生成报告
+        # 4. Generate the report.
         report_path = self.generate_alignment_report()
         
-        # 5. 保存对齐数据
+        # 5. Save aligned data.
         csv_path = self.save_aligned_data()
         
         duration = time.time() - start_time
@@ -397,7 +397,7 @@ class GazeUIAligner:
         }
     
     def generate_gaze_video(self, output_name='gaze_points.mp4'):
-        """生成每帧gaze点叠加在UI图像上的视频"""
+        """Generate a video with per-frame gaze overlays on UI images."""
         print(f"🎬 生成gaze点叠加视频...")
         import matplotlib.animation as animation
         fig, ax = plt.subplots(figsize=(6, 4))
@@ -421,7 +421,7 @@ class GazeUIAligner:
         return video_path
 
     def generate_heatmap_video(self, output_name='heatmap_dynamic.mp4'):
-        """生成动态热力图视频（gaze分布随时间累积）"""
+        """Generate a dynamic heatmap video with gaze accumulated over time."""
         print(f"🎬 生成动态热力图视频...")
         import matplotlib.animation as animation
         fig, ax = plt.subplots(figsize=(6, 4))
@@ -435,7 +435,7 @@ class GazeUIAligner:
                 all_x.extend(aligned['mapped_x'])
                 all_y.extend(aligned['mapped_y'])
                 heatmap, xedges, yedges = np.histogram2d(all_x, all_y, bins=40)
-                # extent的y轴反向，origin设为upper
+                # Reverse the extent's Y axis and set origin to upper.
                 ax.imshow(heatmap, cmap='jet', alpha=0.5, origin='upper', extent=[0, img.size[0], img.size[1], 0])
                 ax.set_title(f"Heatmap up to Frame {aligned['ui_frame']['frame_id']}")
                 ax.axis('off')
@@ -450,7 +450,7 @@ class GazeUIAligner:
 
 
 def list_available_data_folders():
-    """列出所有可用的数据文件夹"""
+    """List all available data folders."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
     data_collected_dir = os.path.join(current_dir, '..', 'data_collected')
     
@@ -464,12 +464,12 @@ def list_available_data_folders():
         if os.path.isdir(folder_path) and item.startswith('carla_data_'):
             folders.append(item)
     
-    folders.sort(reverse=True)  # 按时间排序（最新的在前）
+    folders.sort(reverse=True)  # Sort by time, newest first.
     return folders
 
 
 def main():
-    """主函数 - 从data_collected文件夹中选择数据"""
+    """Select input data from data_collected."""
     print("🎯 Gaze-UI对齐分析工具")
     print("=" * 50)
     
@@ -485,7 +485,7 @@ def main():
     for i, folder in enumerate(available_folders, 1):
         print(f"   {i}. {folder}")
     
-    # 让用户选择
+    # Ask the user to select an option.
     selected_folder = None
     while True:
         try:
@@ -507,7 +507,7 @@ def main():
         except Exception as e:
             print(f"❌ 输入错误: {e}")
     
-    # 构建完整路径
+    # Construct the absolute path.
     current_dir = os.path.dirname(os.path.abspath(__file__))
     data_collected_dir = os.path.join(current_dir, '..', 'data_collected')
     full_path = os.path.join(data_collected_dir, selected_folder)
@@ -515,7 +515,7 @@ def main():
     print(f"\n📊 开始分析: {selected_folder}")
     
     try:
-        # 创建分析器并运行
+        # Create and run the analyzer.
         aligner = GazeUIAligner(full_path, window_ms=50)
         results = aligner.run_full_analysis()
         
@@ -535,14 +535,14 @@ def main():
 
 
 if __name__ == "__main__":
-    # ==================== 修改这里的路径 ====================
+    # ==================== EDIT THE PATH HERE ====================
     data_path = r"C:\Users\USER\Desktop\CARLA_package\py code\35fps_Stable_Version\data_collected\carla_data_2025-10-18_15-59-00"
     # =====================================================
     print(f"📂 数据路径: {data_path}\n")
     try:
         aligner = GazeUIAligner(data_path, window_ms=50)
         results = aligner.run_full_analysis()
-        # 自动生成视频
+        # Generate videos automatically.
         if len(aligner.aligned_data) > 0:
             aligner.generate_gaze_video()
             aligner.generate_heatmap_video()
