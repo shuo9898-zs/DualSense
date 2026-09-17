@@ -1,5 +1,7 @@
 # DUALSense
 
+<img width="1973" height="846" alt="DUALSense platform teaser" src="https://github.com/user-attachments/assets/df828c68-6f37-4da3-a128-5bb53ca27357" />
+
 Python-side data collection and SUMO traffic co-simulation for a dual-user driver–worker research platform. This is a code release, not a standalone simulator distribution.
 
 ## Included and excluded
