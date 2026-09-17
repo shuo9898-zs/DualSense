@@ -1,7 +1,7 @@
 """
-独立眼动追踪系统
-完全独立运行，不依赖主程序的任何逻辑
-在单独的线程中运行，不影响主程序FPS
+Standalone eye-tracking system
+Runs independently of the main application's logic.
+Uses a separate thread to avoid affecting main-loop FPS.
 """
 
 import csv
@@ -12,14 +12,14 @@ from datetime import datetime
 
 
 class StandaloneEyeTracker:
-    """独立眼动追踪器 - 30Hz采集，CSV批量保存"""
+    """Standalone eye tracker with 30 Hz acquisition and batched CSV saving"""
     
     def __init__(self, output_dir: str):
         """
-        初始化独立眼动追踪器
+        Initialize the standalone eye tracker.
         
         Args:
-            output_dir: 数据输出目录（直接保存到此目录，不创建子文件夹）
+            output_dir: Direct output directory; no subfolder is created
         """
         self.output_dir = output_dir
         self.csv_path = os.path.join(output_dir, "gaze_data.csv")
@@ -28,42 +28,42 @@ class StandaloneEyeTracker:
         self.api = None
         self.is_connected = False
         
-        # 屏幕参数
+        # Screen parameters
         self.screen_width = 1920
         self.screen_height = 1080
         
-        # 数据缓冲
+        # Data buffer
         self.data_buffer = []
         self.buffer_lock = threading.Lock()
         
-        # 控制标志
+        # Control flags
         self.running = False
         self.collection_thread = None
         self.save_thread = None
         
-        # 统计
+        # Statistics
         self.total_samples = 0
         self.start_time = None
         
-        # 时间控制 - 10Hz（降低频率以减少性能影响）
+        # 10 Hz timing control to reduce performance impact
         self.target_hz = 10
         self.frame_interval = 1.0 / self.target_hz
         
     def initialize(self) -> bool:
-        """初始化BeamEye连接"""
+        """Initialize the BeamEye connection."""
         try:
             import eyeware.beam_eye_tracker as bet
             
             print("[眼动] 连接BeamEye SDK...")
             
-            # 创建 viewport（与 eye.py 相同）
+            # Create the viewport as in eye.py.
             viewport = bet.ViewportGeometry()
             viewport.point_00 = bet.Point(0, 0)
             viewport.point_11 = bet.Point(self.screen_width, self.screen_height)
             
             self.api = bet.API("StandaloneGaze", viewport)
             
-            # 快速验证数据流（只尝试3次，每次50ms）
+            # Quickly verify the stream: three attempts, 50 ms each.
             print("[眼动] 验证数据流...")
             last_ts = bet.NULL_DATA_TIMESTAMP()
             
@@ -92,7 +92,7 @@ class StandaloneEyeTracker:
             return False
     
     def start(self):
-        """启动眼动追踪（在独立线程中）"""
+        """Start eye tracking in a separate thread."""
         if not self.is_connected:
             print("[眼动] ⚠️ SDK未连接，无法启动")
             return
@@ -101,13 +101,13 @@ class StandaloneEyeTracker:
             print("[眼动] ⚠️ 已在运行中")
             return
         
-        # 确保输出目录存在
+        # Ensure the output directory exists.
         os.makedirs(self.output_dir, exist_ok=True)
         
-        # 初始化CSV文件
+        # Initialize the CSV file.
         self._initialize_csv()
         
-        # 启动线程
+        # Start the thread.
         self.running = True
         self.start_time = time.time()
         
@@ -130,19 +130,19 @@ class StandaloneEyeTracker:
         print(f"[眼动] 📁 数据保存: {self.csv_path}")
     
     def _initialize_csv(self):
-        """初始化CSV文件（写入表头）"""
+        """Initialize the CSV file and write its header."""
         with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow([
-                'pc_timestamp_str',  # PC时间戳（可读格式）
-                'beam_timestamp',    # BeamEye时间戳（秒）
-                'gaze_x',           # 屏幕X坐标（像素）
-                'gaze_y',           # 屏幕Y坐标（像素）
-                'confidence'        # 置信度：3=高，2=中，1=低，0=丢失
+                'pc_timestamp_str',  # Human-readable PC timestamp
+                'beam_timestamp',    # BeamEye timestamp in seconds
+                'gaze_x',           # Screen X coordinate in pixels
+                'gaze_y',           # Screen Y coordinate in pixels
+                'confidence'        # Confidence: 3=high, 2=medium, 1=low, 0=lost
             ])
     
     def _collection_loop(self):
-        """数据采集循环 - 精确30Hz"""
+        """Data-acquisition loop at precisely 30 Hz."""
         import eyeware.beam_eye_tracker as bet
         
         last_ts = bet.NULL_DATA_TIMESTAMP()
@@ -152,9 +152,9 @@ class StandaloneEyeTracker:
             try:
                 current_time = time.time()
                 
-                # 时间控制 - 仅在到达预定时间时采集
+                # Collect only when the scheduled time is reached.
                 if current_time >= next_capture_time:
-                    # 获取眼动数据
+                    # Get gaze data.
                     if self.api.wait_for_new_tracking_state_set(last_ts, 50):
                         ts_set = self.api.get_latest_tracking_state_set()
                         user = ts_set.user_state()
@@ -162,14 +162,14 @@ class StandaloneEyeTracker:
                         if user.timestamp_in_seconds != bet.NULL_DATA_TIMESTAMP():
                             gaze = user.unified_screen_gaze
                             
-                            # 使用可读时间格式（与vehicle_data对齐）
+                            # Use human-readable timestamps aligned with vehicle_data.
                             import datetime
                             pc_timestamp_readable = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                             beam_timestamp = user.timestamp_in_seconds
                             gaze_x = float(gaze.point_of_regard.x)
                             gaze_y = float(gaze.point_of_regard.y)
                             
-                            # 置信度 - 使用字符串（与 eye.py 一致）
+                            # Use confidence strings as in eye.py.
                             conf_value = gaze.confidence
                             if conf_value == 3:
                                 confidence = "high"
@@ -180,7 +180,7 @@ class StandaloneEyeTracker:
                             else:
                                 confidence = "lost"
                             
-                            # 存入缓冲（使用可读时间格式）
+                            # Buffer data using human-readable timestamps.
                             data = f"{pc_timestamp_readable},{beam_timestamp},{gaze_x:.1f},{gaze_y:.1f},{confidence}\n"
                             
                             with self.buffer_lock:
@@ -189,14 +189,14 @@ class StandaloneEyeTracker:
                             self.total_samples += 1
                             last_ts = user.timestamp_in_seconds
                     
-                    # 计算下一次采集时间（补偿漂移）
+                    # Calculate the next acquisition time with drift compensation.
                     next_capture_time += self.frame_interval
                     
-                    # 如果已经落后太多，重置时间
+                    # Reset timing if acquisition falls too far behind.
                     if next_capture_time < current_time - self.frame_interval:
                         next_capture_time = current_time + self.frame_interval
                 else:
-                    # 未到采集时间，短暂休眠
+                    # Sleep briefly until the next acquisition time.
                     time.sleep(0.001)
                     
             except Exception as e:
@@ -204,11 +204,11 @@ class StandaloneEyeTracker:
                 time.sleep(0.01)
     
     def _save_loop(self):
-        """数据保存循环 - 每秒批量写入"""
+        """Data-saving loop with batched writes every second."""
         while self.running:
-            time.sleep(1.0)  # 每秒保存一次
+            time.sleep(1.0)  # Save once per second.
             
-            # 获取缓冲区数据
+            # Retrieve buffered data.
             with self.buffer_lock:
                 if len(self.data_buffer) > 0:
                     data_to_save = self.data_buffer.copy()
@@ -216,7 +216,7 @@ class StandaloneEyeTracker:
                 else:
                     data_to_save = []
             
-            # 写入CSV（与 eye.py 格式一致）
+            # Write CSV in the same format as eye.py.
             if data_to_save:
                 try:
                     with open(self.csv_path, 'a', encoding='utf-8', buffering=8192) as f:
@@ -225,20 +225,20 @@ class StandaloneEyeTracker:
                     print(f"[眼动] ⚠️ 保存错误: {e}")
     
     def stop(self):
-        """停止眼动追踪"""
+        """Stop eye tracking."""
         if not self.running:
             return
         
         print("[眼动] 停止中...")
         self.running = False
         
-        # 等待线程结束
+        # Wait for threads to finish.
         if self.collection_thread:
             self.collection_thread.join(timeout=2.0)
         if self.save_thread:
             self.save_thread.join(timeout=2.0)
         
-        # 保存剩余数据
+        # Save remaining data.
         with self.buffer_lock:
             if len(self.data_buffer) > 0:
                 try:
@@ -248,7 +248,7 @@ class StandaloneEyeTracker:
                 except Exception as e:
                     print(f"[眼动] ⚠️ 最终保存失败: {e}")
         
-        # 显示统计
+        # Display statistics.
         if self.start_time:
             duration = time.time() - self.start_time
             avg_hz = self.total_samples / duration if duration > 0 else 0
@@ -261,34 +261,34 @@ class StandaloneEyeTracker:
 
 
 def main():
-    """独立测试入口"""
+    """Standalone test entry point."""
     print("=" * 60)
     print("独立眼动追踪系统测试")
     print("=" * 60)
     
-    # 创建测试输出目录
+    # Create the test output directory.
     test_dir = "./test_gaze_output"
     os.makedirs(test_dir, exist_ok=True)
     
-    # 创建追踪器
+    # Create the tracker.
     tracker = StandaloneEyeTracker(output_dir=test_dir)
     
-    # 初始化
+    # Initialize.
     if not tracker.initialize():
         print("❌ 初始化失败")
         return
     
-    # 启动
+    # Start.
     tracker.start()
     
-    # 运行指定时间
+    # Run for the specified duration.
     try:
         print("\n⏱️ 运行10秒，按Ctrl+C提前结束...")
         time.sleep(10)
     except KeyboardInterrupt:
         print("\n⚠️ 用户中断")
     
-    # 停止
+    # Stop.
     tracker.stop()
     
     print(f"\n✅ 数据已保存到: {tracker.csv_path}")

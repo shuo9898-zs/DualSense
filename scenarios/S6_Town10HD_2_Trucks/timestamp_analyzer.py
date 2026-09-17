@@ -1,7 +1,7 @@
 """
-CARLA 数据时间戳同步分析器
-分析gaze数据和UI图像的时间戳对齐情况
-确保数据时间完全一致并提供同步工具
+CARLA timestamp synchronization analyzer
+Analyze timestamp alignment between gaze data and UI images.
+Provide tools for aligning data timestamps.
 """
 
 import os
@@ -12,14 +12,14 @@ import glob
 
 
 class DataTimestampAnalyzer:
-    """数据时间戳分析器 - 确保gaze和UI时间完全对齐"""
+    """Timestamp analyzer for aligning gaze and UI data"""
     
     def __init__(self, data_session_path: str):
         """
-        初始化分析器
+        Initialize the analyzer.
         
         Args:
-            data_session_path: CARLA数据会话路径 (如 carla_data_2025-10-17_22-19-45)
+            data_session_path: CARLA session path, e.g. carla_data_2025-10-17_22-19-45
         """
         self.session_path = data_session_path
         self.gaze_data = None
@@ -29,13 +29,13 @@ class DataTimestampAnalyzer:
         print(f"🔍 分析数据会话: {os.path.basename(data_session_path)}")
         
     def load_all_data(self):
-        """加载所有时间戳相关数据"""
+        """Load all timestamp-related data."""
         self._load_gaze_data()
         self._load_vehicle_data()
         self._load_ui_frames()
         
     def _load_gaze_data(self):
-        """加载gaze数据"""
+        """Load gaze data."""
         gaze_file = os.path.join(self.session_path, "gaze_data.csv")
         if not os.path.exists(gaze_file):
             print("❌ 未找到gaze_data.csv")
@@ -58,7 +58,7 @@ class DataTimestampAnalyzer:
             print(f"❌ 加载gaze数据失败: {e}")
             
     def _load_vehicle_data(self):
-        """加载车辆数据"""
+        """Load vehicle data."""
         vehicle_file = os.path.join(self.session_path, "vehicle_data.csv")
         if not os.path.exists(vehicle_file):
             print("❌ 未找到vehicle_data.csv")
@@ -81,19 +81,19 @@ class DataTimestampAnalyzer:
             print(f"❌ 加载车辆数据失败: {e}")
             
     def _load_ui_frames(self):
-        """加载UI图像时间戳"""
+        """Load UI image timestamps."""
         ui_dir = os.path.join(self.session_path, "driving_ui")
         if not os.path.exists(ui_dir):
             print("❌ 未找到driving_ui文件夹")
             return
             
-        # 从文件名提取时间戳: frame_XXXXXX_timestamp.png
+        # Extract timestamps from frame_XXXXXX_timestamp.png filenames.
         frame_files = glob.glob(os.path.join(ui_dir, "frame_*.png"))
         
         ui_timestamps = []
         for file_path in frame_files:
             filename = os.path.basename(file_path)
-            # 匹配格式: frame_000001_1760753986032.png
+            # Match filenames such as frame_000001_1760753986032.png.
             match = re.match(r'frame_(\d+)_(\d+)\.png', filename)
             if match:
                 frame_id = int(match.group(1))
@@ -112,7 +112,7 @@ class DataTimestampAnalyzer:
             print(f"   持续时间: {(max(timestamps) - min(timestamps)) / 1000:.1f}秒")
     
     def analyze_timestamp_alignment(self):
-        """分析时间戳对齐情况"""
+        """Analyze timestamp alignment."""
         if not self.gaze_data or not self.ui_frames:
             print("❌ 数据未完全加载，无法分析对齐")
             return
@@ -120,7 +120,7 @@ class DataTimestampAnalyzer:
         print("\n📊 时间戳对齐分析:")
         print("=" * 50)
         
-        # 基本时间范围对比
+        # Compare overall time ranges.
         gaze_timestamps = [row['timestamp_ms'] for row in self.gaze_data]
         ui_timestamps = [frame['timestamp_ms'] for frame in self.ui_frames]
         
@@ -132,7 +132,7 @@ class DataTimestampAnalyzer:
         print(f"Gaze时间范围: {gaze_start} - {gaze_end}")
         print(f"UI图像范围:   {ui_start} - {ui_end}")
         
-        # 计算时间偏移
+        # Calculate time offsets.
         start_diff = ui_start - gaze_start
         end_diff = ui_end - gaze_end
         
@@ -140,7 +140,7 @@ class DataTimestampAnalyzer:
         print(f"开始时间偏移: {start_diff}ms ({start_diff/1000:.2f}秒)")
         print(f"结束时间偏移: {end_diff}ms ({end_diff/1000:.2f}秒)")
         
-        # 重叠时间范围
+        # Overlapping time range
         overlap_start = max(gaze_start, ui_start)
         overlap_end = min(gaze_end, ui_end)
         overlap_duration = (overlap_end - overlap_start) / 1000
@@ -153,7 +153,7 @@ class DataTimestampAnalyzer:
             print("❌ 警告: gaze数据和UI图像没有时间重叠!")
             return
             
-        # 在重叠时间内分析数据密度
+        # Analyze data density within the overlap.
         gaze_in_overlap = [row for row in self.gaze_data 
                           if overlap_start <= row['timestamp_ms'] <= overlap_end]
         ui_in_overlap = [frame for frame in self.ui_frames 
@@ -165,9 +165,9 @@ class DataTimestampAnalyzer:
         print(f"Gaze频率: {len(gaze_in_overlap) / overlap_duration:.1f} Hz")
         print(f"UI频率: {len(ui_in_overlap) / overlap_duration:.1f} Hz")
         
-        # 检查理论频率匹配
-        expected_gaze_fps = 30  # GazeTracker设定30Hz
-        expected_ui_fps = 30    # UIRecorder设定30Hz
+        # Check against expected sampling rates.
+        expected_gaze_fps = 30  # GazeTracker is configured for 30 Hz.
+        expected_ui_fps = 30    # UIRecorder is configured for 30 Hz.
         
         actual_gaze_fps = len(gaze_in_overlap) / overlap_duration
         actual_ui_fps = len(ui_in_overlap) / overlap_duration
@@ -176,7 +176,7 @@ class DataTimestampAnalyzer:
         print(f"Gaze - 预期: {expected_gaze_fps}Hz, 实际: {actual_gaze_fps:.1f}Hz")
         print(f"UI   - 预期: {expected_ui_fps}Hz, 实际: {actual_ui_fps:.1f}Hz")
         
-        # 时间戳精度分析
+        # Timestamp precision analysis
         if len(gaze_in_overlap) > 1:
             gaze_times = sorted([row['timestamp_ms'] for row in gaze_in_overlap])
             gaze_intervals = [gaze_times[i+1] - gaze_times[i] for i in range(len(gaze_times)-1)]
@@ -207,10 +207,10 @@ class DataTimestampAnalyzer:
     
     def find_temporal_matches(self, max_time_diff_ms=50):
         """
-        找到gaze数据和UI图像的时间匹配对
+        Find temporally matched gaze samples and UI images.
         
         Args:
-            max_time_diff_ms: 最大时间差阈值(毫秒)
+            max_time_diff_ms: Maximum matching time difference in milliseconds
         """
         if self.gaze_data is None or self.ui_frames is None:
             print("❌ 数据未完全加载")
@@ -223,7 +223,7 @@ class DataTimestampAnalyzer:
         for ui_frame in self.ui_frames:
             ui_timestamp = ui_frame['timestamp_ms']
             
-            # 找到时间最接近的gaze数据点
+            # Find the temporally closest gaze sample.
             min_diff = float('inf')
             closest_gaze = None
             
@@ -257,11 +257,11 @@ class DataTimestampAnalyzer:
     
     def create_synchronized_dataset(self, output_file: str = None, max_time_diff_ms=50):
         """
-        创建同步数据集 - 将gaze和UI数据按时间戳对齐
+        Create a synchronized dataset by matching gaze and UI timestamps.
         
         Args:
-            output_file: 输出CSV文件路径 (默认在会话文件夹内)
-            max_time_diff_ms: 时间匹配阈值
+            output_file: Output CSV path; defaults to the session folder
+            max_time_diff_ms: Timestamp matching threshold
         """
         matches = self.find_temporal_matches(max_time_diff_ms)
         
@@ -272,7 +272,7 @@ class DataTimestampAnalyzer:
         if output_file is None:
             output_file = os.path.join(self.session_path, "synchronized_gaze_ui_data.csv")
         
-        # 保存同步数据
+        # Save synchronized data.
         if matches:
             with open(output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=matches[0].keys())
@@ -284,14 +284,14 @@ class DataTimestampAnalyzer:
 
 
 def analyze_data_session(session_path: str):
-    """分析单个数据会话的时间戳对齐"""
+    """Analyze timestamp alignment for one session."""
     analyzer = DataTimestampAnalyzer(session_path)
     analyzer.load_all_data()
     
-    # 基础分析
+    # Basic analysis
     stats = analyzer.analyze_timestamp_alignment()
     
-    # 创建同步数据集
+    # Create a synchronized dataset.
     if stats:
         sync_data = analyzer.create_synchronized_dataset()
         return analyzer, sync_data
@@ -300,7 +300,7 @@ def analyze_data_session(session_path: str):
 
 
 def analyze_all_sessions(data_root: str = "./data_collected"):
-    """分析所有数据会话"""
+    """Analyze all data sessions."""
     print("🔍 分析所有CARLA数据会话...")
     
     session_dirs = glob.glob(os.path.join(data_root, "carla_data_*"))
@@ -328,7 +328,7 @@ def analyze_all_sessions(data_root: str = "./data_collected"):
                 'success': False
             })
     
-    # 汇总报告
+    # Summary report
     print(f"\n{'='*60}")
     print("📊 汇总报告")
     print('='*60)
@@ -342,7 +342,7 @@ def analyze_all_sessions(data_root: str = "./data_collected"):
 
 
 if __name__ == "__main__":
-    # 分析最新的数据会话
+    # Analyze the latest session.
     import sys
     
     if len(sys.argv) > 1:
@@ -350,10 +350,10 @@ if __name__ == "__main__":
         print(f"分析指定会话: {session_path}")
         analyzer, sync_data = analyze_data_session(session_path)
     else:
-        # 分析所有会话
+        # Analyze all sessions.
         results = analyze_all_sessions()
         
-        # 显示同步数据样本
+        # Display synchronized data samples.
         for result in results:
             if result['success'] and result['sync_data']:
                 print(f"\n📋 {result['session']} 同步数据样本 (前5条):")

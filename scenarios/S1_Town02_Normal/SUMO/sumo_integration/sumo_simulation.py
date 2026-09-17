@@ -99,7 +99,7 @@ class SumoSimulation:
             '--no-warnings', 'true',
             '--ignore-route-errors', 'true',
             '--ignore-accidents', 'true',
-            '--time-to-teleport', '-1',  # 禁用传送（车辆卡住时不会被传送）
+            '--time-to-teleport', '-1',  # Disable teleportation for stuck vehicles.
             '--time-to-teleport.highways', '-1',
         ]
         

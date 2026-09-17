@@ -1,34 +1,34 @@
 """
-超级恶劣天气场景 - 基于rain.py的最糟糕配置
+Extreme-weather scenario using the harshest rain.py configuration
 """
 
 def set_nightmare_storm(self):
-    """设置噩梦级暴风雨（最恶劣场景）"""
+    """Configure the most severe storm scenario."""
     weather = carla.WeatherParameters(
-        # 🌧️ 降水 - 最大值
-        cloudiness=100.0,          # 完全阴云
-        precipitation=100.0,       # 暴雨 (最大)
-        precipitation_deposits=100.0, # 严重积水
+        # Maximum precipitation
+        cloudiness=100.0,          # Fully overcast
+        precipitation=100.0,       # Maximum heavy rain
+        precipitation_deposits=100.0, # Severe standing water
         
-        # 💨 风力 - 最强
-        wind_intensity=100.0,      # 暴风 (最大)
+        # Maximum wind
+        wind_intensity=100.0,      # Maximum storm intensity
         
-        # 🌙 时间 - 最黑暗的夜晚
+        # Darkest nighttime setting
         sun_azimuth_angle=0.0,
-        sun_altitude_angle=-90.0,  # 深夜 (最黑)
+        sun_altitude_angle=-90.0,  # Deep night; maximum darkness
         
-        # 🌫️ 雾气 - 最浓密
-        fog_density=100.0,         # 浓雾 (最大)
-        fog_distance=5.0,          # 极近视距 (5米!)
-        fog_falloff=10.0,          # 急剧衰减
+        # Maximum fog
+        fog_density=100.0,         # Maximum fog density
+        fog_distance=5.0,          # Very short visibility: 5 meters
+        fog_falloff=10.0,          # Steep falloff
         
-        # 🛣️ 路面 - 最危险
-        wetness=100.0,             # 完全湿滑 (最大)
+        # Most hazardous road surface
+        wetness=100.0,             # Maximum surface wetness
         
-        # 💡 光线散射 - 最差视觉
-        scattering_intensity=0.1,  # 最低散射 (更暗)
-        mie_scattering_scale=0.1,  # 增加颗粒散射
-        rayleigh_scattering_scale=0.01  # 减少蓝光散射
+        # Light scattering for the poorest visibility
+        scattering_intensity=0.1,  # Minimum scattering; darker appearance
+        mie_scattering_scale=0.1,  # Increase particle scattering.
+        rayleigh_scattering_scale=0.01  # Reduce blue-light scattering.
     )
     
     self.world.set_weather(weather)

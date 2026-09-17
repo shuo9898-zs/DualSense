@@ -1,16 +1,16 @@
 """
-CARLA-SUMO 20Hz双向同步系统 - 独立运行版本
-完全独立于主CARLA系统，可单独运行的SUMO-CARLA同步
+Standalone bidirectional CARLA-SUMO synchronization at 20 Hz
+Run SUMO-CARLA synchronization independently of the main CARLA application.
 
-功能：
-1. SUMO → CARLA: 控制非ego车辆 (生成、更新、删除)
-2. CARLA → SUMO: 同步ego车辆位置 (使用moveToXY)
-3. 交通信号灯: 20秒绿灯/20秒红灯循环同步
+Features:
+1. SUMO -> CARLA: spawn, update, and remove non-ego vehicles.
+2. CARLA -> SUMO: synchronize the ego position using moveToXY.
+3. Synchronize traffic lights with a 20-second green/20-second red cycle.
 
-使用方法：
-1. 启动CARLA服务器
-2. 运行此脚本: python main_sumo_sync.py
-3. 在CARLA中手动驾驶，观察SUMO车辆同步
+Usage:
+1. Start the CARLA server.
+2. Run python main_sumo_sync.py.
+3. Drive manually in CARLA and observe synchronized SUMO vehicles.
 
 Author: Assistant
 Date: October 23, 2025
@@ -32,77 +32,77 @@ import datetime
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from sumo_integration import BridgeHelper, SumoSimulation, CarlaSimulation
 
-# Configure logging - 禁用警告信息
+# Configure logging to suppress warnings.
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# 创建一个只显示INFO和ERROR的过滤器
+# Create a filter showing only INFO and ERROR messages.
 class SuppressWarningFilter(logging.Filter):
     def filter(self, record):
-        # 禁用所有WARNING级别的日志
+        # Suppress all WARNING-level logs.
         return record.levelno != logging.WARNING
 
 logger.addFilter(SuppressWarningFilter())
 
 
 class SumoCarlaSync:
-    """20Hz双向SUMO-CARLA同步管理器"""
+    """Bidirectional SUMO-CARLA synchronization manager at 20 Hz"""
     
     def __init__(self, carla_host='localhost', carla_port=2000, use_gui=False, save_path=None):
-        # 连接参数
+        # Connection parameters
         self.carla_host = carla_host
         self.carla_port = carla_port
         self.use_gui = use_gui
         self.save_path = save_path
         
-        # 核心组件
+        # Core components
         self.carla_client = None
         self.carla_world = None
         self.sumo_sim = None
         
-        # 同步频率
+        # Synchronization frequency
         self.sync_frequency = 20  # Hz
-        self.sync_interval = 1.0 / self.sync_frequency  # 0.05秒
+        self.sync_interval = 1.0 / self.sync_frequency  # 0.05 seconds
         
-        # 线程管理
+        # Thread management
         self.running = False
         self.sync_thread = None
         
-        # 车辆跟踪
+        # Vehicle tracking
         self.sumo_vehicles = {}  # sumo_id -> carla_actor
-        self.ego_vehicle = None  # CARLA ego车辆
+        self.ego_vehicle = None  # CARLA ego vehicle
         self.ego_sumo_id = 'ego_vehicle'
-        self.vehicle_id_prefix = 'truck_'  # 当前使用的车辆ID前缀
+        self.vehicle_id_prefix = 'truck_'  # Current vehicle-ID prefix
         
-        # 交通信号灯
-        self.traffic_cycle_time = 40.0  # 总周期：20秒绿灯 + 20秒红灯
+        # Traffic lights
+        self.traffic_cycle_time = 40.0  # Full cycle: 20 seconds green plus 20 seconds red
         self.green_time = 20.0
         self.cycle_start_time = None
         
-        # 配置
-        self.lateral_shift = 0.0  # 车道对齐调整（向右偏移一个车道）
+        # Configuration
+        self.lateral_shift = 0.0  # Lane alignment: shift right by one lane.
         self.prevent_ego_deletion = True
         
-        # 数据记录 - 10Hz频率记录SUMO车辆数据
+        # Log SUMO vehicle data at 10 Hz.
         self.data_recording_frequency = 10  # Hz
-        self.data_recording_interval = 1.0 / self.data_recording_frequency  # 0.1秒
+        self.data_recording_interval = 1.0 / self.data_recording_frequency  # 0.1 seconds
         self.last_data_record_time = 0.0
         self.vehicle_data_file = None
         self.vehicle_data_writer = None
-        self.previous_vehicle_data = {}  # 存储上一帧数据用于计算加速度
+        self.previous_vehicle_data = {}  # Keep previous-frame data for acceleration calculations.
         
         logger.info(f"SumoCarlaSync初始化 - {self.sync_frequency}Hz频率, {self.data_recording_frequency}Hz数据记录")
     
     def initialize(self):
-        """初始化CARLA和SUMO连接"""
+        """Initialize CARLA and SUMO connections."""
         try:
-            # 1. 连接CARLA
+            # 1. Connect to CARLA.
             logger.info("连接CARLA...")
             self.carla_client = carla.Client(self.carla_host, self.carla_port)
             self.carla_client.set_timeout(10.0)
             self.carla_world = self.carla_client.get_world()
             
-            # 设置异步模式以获得更好性能
+            # Use asynchronous mode for better performance.
             settings = self.carla_world.get_settings()
             settings.synchronous_mode = False
             settings.fixed_delta_seconds = None
@@ -110,17 +110,17 @@ class SumoCarlaSync:
             
             logger.info(f"✅ 已连接CARLA {self.carla_host}:{self.carla_port}")
             
-            # 2. 初始化SUMO
+            # 2. Initialize SUMO.
             logger.info("启动SUMO仿真...")
             sumo_cfg = os.path.join(os.path.dirname(__file__), 'sumo_files', 'simulation.sumocfg')
             
             self.sumo_sim = SumoSimulation(
                 cfg_file=sumo_cfg,
-                step_length=self.sync_interval,  # 匹配同步频率
-                sumo_gui=self.use_gui  # 根据用户选择启用/禁用GUI
+                step_length=self.sync_interval,  # Match the synchronization frequency.
+                sumo_gui=self.use_gui  # Enable or disable the GUI according to user settings.
             )
             
-            # 3. 配置BridgeHelper
+            # 3. Configure BridgeHelper.
             BridgeHelper.lateral_shift = self.lateral_shift
             BridgeHelper.offset = self.sumo_sim.get_net_offset()
             BridgeHelper.blueprint_library = self.carla_world.get_blueprint_library()
@@ -128,10 +128,10 @@ class SumoCarlaSync:
             logger.info(f"✅ SUMO已启动，偏移量: {BridgeHelper.offset}")
             logger.info(f"✅ 横向偏移: {self.lateral_shift}m")
             
-            # 4. 初始化交通信号灯周期
+            # 4. Initialize the traffic-light cycle.
             self.cycle_start_time = time.time()
             
-            # 5. 初始化CSV数据记录文件
+            # 5. Initialize CSV logging.
             self._initialize_data_recording()
             
             return True
@@ -141,13 +141,13 @@ class SumoCarlaSync:
             return False
     
     def find_ego_vehicle(self):
-        """自动查找CARLA中的ego车辆"""
+        """Automatically find the CARLA ego vehicle."""
         try:
             actors = self.carla_world.get_actors()
             vehicles = actors.filter('vehicle.*')
             
             for vehicle in vehicles:
-                # 查找有role_name="hero"或没有autopilot的车辆
+                # Look for role_name="hero" or a vehicle without autopilot.
                 if hasattr(vehicle, 'attributes'):
                     role_name = vehicle.attributes.get('role_name', '')
                     if role_name == 'hero':
@@ -155,7 +155,7 @@ class SumoCarlaSync:
                         logger.info(f"✅ 找到hero车辆: CARLA ID {vehicle.id}")
                         return True
             
-            # 如果没有hero，选择第一个车辆
+            # If no hero is found, select the first vehicle.
             if vehicles:
                 self.ego_vehicle = vehicles[0]
                 logger.info(f"✅ 使用第一个车辆作为ego: CARLA ID {self.ego_vehicle.id}")
@@ -169,41 +169,41 @@ class SumoCarlaSync:
             return False
     
     def set_ego_vehicle(self, ego_vehicle):
-        """设置CARLA ego车辆用于SUMO同步"""
+        """Set the CARLA ego vehicle for SUMO synchronization."""
         self.ego_vehicle = ego_vehicle
         logger.info(f"✅ Ego车辆已设置: CARLA ID {ego_vehicle.id}")
         
-        # 添加ego到SUMO
+        # Add the ego vehicle to SUMO.
         self._add_ego_to_sumo()
     
     def _add_ego_to_sumo(self):
-        """添加ego车辆到SUMO仿真"""
+        """Add the ego vehicle to the SUMO simulation."""
         if not self.ego_vehicle:
             return
             
         try:
-            # 检查ego是否已存在于SUMO
+            # Check whether the ego vehicle already exists in SUMO.
             existing_vehicles = traci.vehicle.getIDList()
             if self.ego_sumo_id in existing_vehicles:
                 logger.info(f"Ego车辆已存在于SUMO: {self.ego_sumo_id}")
                 return
             
-            # 转换CARLA位置到SUMO
+            # Convert the CARLA position to SUMO coordinates.
             carla_transform = self.ego_vehicle.get_transform()
-            extent = carla.Vector3D(2.5, 1.0, 0.75)  # 大致车辆尺寸
+            extent = carla.Vector3D(2.5, 1.0, 0.75)  # Approximate vehicle dimensions
             
             sumo_transform = BridgeHelper.get_sumo_transform(carla_transform, extent)
             sumo_x, sumo_y = sumo_transform['location'][:2]
             sumo_angle = sumo_transform['rotation']
             
-            # 尝试添加车辆 - 使用更健壮的方法
+            # Try adding the vehicle using a more robust approach.
             try:
-                # 获取可用路线
+                # Get available routes.
                 route_ids = traci.route.getIDList()
                 route_to_use = 'loop_route' if 'loop_route' in route_ids else (route_ids[0] if route_ids else None)
                 
                 if route_to_use:
-                    # 使用现有路线添加车辆
+                    # Add the vehicle using an existing route.
                     traci.vehicle.add(
                         vehID=self.ego_sumo_id,
                         routeID=route_to_use,
@@ -211,11 +211,11 @@ class SumoCarlaSync:
                     )
                     logger.info(f"✅ Ego车辆已添加到SUMO (使用路线: {route_to_use})")
                 else:
-                    # 没有路线时直接使用moveToXY添加
-                    # 首先获取网络中的边缘
+                    # When no route exists, use moveToXY directly.
+                    # First get the network edges.
                     edge_ids = traci.edge.getIDList()
                     if edge_ids:
-                        # 创建简单路线
+                        # Create a simple route.
                         traci.route.add('ego_route', [edge_ids[0]])
                         traci.vehicle.add(
                             vehID=self.ego_sumo_id,
@@ -227,31 +227,31 @@ class SumoCarlaSync:
                         logger.error("❌ 无法找到有效边缘添加ego车辆")
                         return
                 
-                # 等待一个仿真步长确保车辆添加成功
+                # Advance one simulation step to ensure the vehicle was added.
                 traci.simulationStep()
                 
-                # 移动到当前CARLA位置 - 忽略所有错误
+                # Move to the current CARLA position, ignoring errors.
                 try:
                     traci.vehicle.moveToXY(
                         vehID=self.ego_sumo_id,
-                        edgeID='',  # 让SUMO查找边缘
-                        lane=-1,    # 让SUMO查找车道
+                        edgeID='',  # Let SUMO locate the edge.
+                        lane=-1,    # Let SUMO locate the lane.
                         x=sumo_x,
                         y=sumo_y,
                         angle=sumo_angle,
-                        keepRoute=2  # 即使偏离路线也保持车辆
+                        keepRoute=2  # Keep the vehicle even when it leaves the route.
                     )
                 except Exception:
-                    pass  # 忽略所有moveToXY错误
+                    pass  # Ignore all moveToXY errors.
                 
-                # 配置ego完全自由移动模式
+                # Configure unrestricted ego movement.
                 if self.prevent_ego_deletion:
-                    traci.vehicle.setSpeedMode(self.ego_sumo_id, 0)  # 禁用所有安全检查
-                    traci.vehicle.setLaneChangeMode(self.ego_sumo_id, 0)  # 禁用变道检查
-                    traci.vehicle.setMinGap(self.ego_sumo_id, 0)  # 最小间隙为0
-                    traci.vehicle.setTau(self.ego_sumo_id, 0.1)  # 最小反应时间
-                    traci.vehicle.setMaxSpeed(self.ego_sumo_id, 200)  # 设置高最大速度
-                    traci.vehicle.setImperfection(self.ego_sumo_id, 0)  # 完美驾驶员
+                    traci.vehicle.setSpeedMode(self.ego_sumo_id, 0)  # Disable all safety checks.
+                    traci.vehicle.setLaneChangeMode(self.ego_sumo_id, 0)  # Disable lane-change checks.
+                    traci.vehicle.setMinGap(self.ego_sumo_id, 0)  # Set the minimum gap to zero.
+                    traci.vehicle.setTau(self.ego_sumo_id, 0.1)  # Minimum reaction time
+                    traci.vehicle.setMaxSpeed(self.ego_sumo_id, 200)  # Set a high maximum speed.
+                    traci.vehicle.setImperfection(self.ego_sumo_id, 0)  # Perfect driver
                     
                     logger.info("✅ Ego车辆已配置为完全自由移动模式")
                 
@@ -264,7 +264,7 @@ class SumoCarlaSync:
             logger.error(f"添加ego到SUMO失败: {e}")
     
     def start_sync(self):
-        """启动同步线程"""
+        """Start the synchronization thread."""
         if self.running:
             logger.warning("同步已在运行")
             return False
@@ -281,7 +281,7 @@ class SumoCarlaSync:
         return True
     
     def stop_sync(self):
-        """停止同步线程"""
+        """Stop the synchronization thread."""
         if not self.running:
             return
             
@@ -292,26 +292,26 @@ class SumoCarlaSync:
         logger.info("🛑 同步已停止")
     
     def _sync_loop(self):
-        """主同步循环 - 20Hz频率"""
+        """Main synchronization loop at 20 Hz."""
         logger.info("🔄 同步循环开始")
         
         while self.running:
             loop_start_time = time.time()
             
             try:
-                # 执行一个SUMO步长
+                # Advance SUMO by one step.
                 traci.simulationStep()
                 
-                # 1. SUMO → CARLA: 同步车辆
+                # 1. Synchronize vehicles from SUMO to CARLA.
                 self._sync_sumo_to_carla()
                 
-                # 2. CARLA → SUMO: 同步ego车辆
+                # 2. Synchronize the ego vehicle from CARLA to SUMO.
                 self._sync_carla_to_sumo()
                 
-                # 3. 交通信号灯同步
+                # 3. Synchronize traffic lights.
                 self._sync_traffic_lights()
                 
-                # 4. 记录SUMO车辆数据 (10Hz频率)
+                # 4. Log SUMO vehicle data at 10 Hz.
                 self._record_vehicle_data()
                 
             except traci.FatalTraCIError as e:
@@ -321,7 +321,7 @@ class SumoCarlaSync:
                 logger.error(f"同步循环错误: {e}")
                 continue
             
-            # 控制频率
+            # Control the update frequency.
             elapsed = time.time() - loop_start_time
             sleep_time = max(0, self.sync_interval - elapsed)
             if sleep_time > 0:
@@ -330,14 +330,14 @@ class SumoCarlaSync:
         logger.info("🔄 同步循环结束")
     
     def _sync_sumo_to_carla(self):
-        """SUMO → CARLA: 同步非ego车辆"""
+        """Synchronize non-ego vehicles from SUMO to CARLA."""
         try:
             sumo_vehicles = set(traci.vehicle.getIDList())
-            sumo_vehicles.discard(self.ego_sumo_id)  # 排除ego
+            sumo_vehicles.discard(self.ego_sumo_id)  # Exclude the ego vehicle.
             
 
             
-            # 移除不再存在的车辆
+            # Remove vehicles that no longer exist.
             to_remove = []
             for sumo_id in self.sumo_vehicles:
                 if sumo_id not in sumo_vehicles:
@@ -346,7 +346,7 @@ class SumoCarlaSync:
             for sumo_id in to_remove:
                 self._remove_carla_vehicle(sumo_id)
             
-            # 添加新车辆或更新现有车辆
+            # Add new vehicles or update existing ones.
             for sumo_id in sumo_vehicles:
                 if sumo_id not in self.sumo_vehicles:
                     self._spawn_carla_vehicle(sumo_id)
@@ -359,9 +359,9 @@ class SumoCarlaSync:
             traceback.print_exc()
     
     def _spawn_carla_vehicle(self, sumo_id):
-        """为SUMO车辆生成对应的CARLA车辆"""
+        """Spawn a CARLA counterpart for a SUMO vehicle."""
         try:
-            # 获取SUMO车辆信息
+            # Get SUMO vehicle information.
             sumo_pos = traci.vehicle.getPosition(sumo_id)
             sumo_angle = traci.vehicle.getAngle(sumo_id)
             
@@ -372,13 +372,13 @@ class SumoCarlaSync:
                 'rotation': sumo_angle
             }
             
-            # 转换到CARLA坐标
+            # Convert to CARLA coordinates.
             extent = carla.Vector3D(2.5, 1.0, 0.75)
             carla_transform = BridgeHelper.get_carla_transform(sumo_transform, extent)
             
 
             
-            # 选择车辆蓝图 - 使用Carlacola卡车
+            # Select the Carlacola truck blueprint.
             if not hasattr(BridgeHelper, 'blueprint_library') or BridgeHelper.blueprint_library is None:
                 logger.error("❌ BridgeHelper.blueprint_library未初始化")
                 return
@@ -386,16 +386,16 @@ class SumoCarlaSync:
             blueprint = BridgeHelper.blueprint_library.find('vehicle.carlamotors.carlacola')
             blueprint.set_attribute('role_name', f'sumo_{sumo_id}')
             
-            # 禁用物理模拟
+            # Disable physics simulation.
             if blueprint.has_attribute('physics_enabled'):
                 blueprint.set_attribute('physics_enabled', 'false')
             
-            # 生成车辆 - 如果碰撞则尝试抬高位置
+            # Spawn the vehicle; try a higher position if spawning collides.
             carla_vehicle = None
             for z_offset in [0.0, 0.3, 1.0, 2.0]:
                 try:
                     if z_offset > 0:
-                        # 创建抬高的生成位置
+                        # Create an elevated spawn position.
                         elevated_transform = carla.Transform(
                             carla.Location(
                                 carla_transform.location.x,
@@ -415,9 +415,9 @@ class SumoCarlaSync:
                         break
                 except RuntimeError as spawn_error:
                     if "collision" in str(spawn_error).lower() and z_offset < 2.0:
-                        continue  # 尝试下一个偏移
+                        continue  # Try the next offset.
                     else:
-                        raise  # 其他错误或已尝试所有偏移
+                        raise  # Other error, or all offsets have been tried.
             
             if not carla_vehicle:
                 logger.warning(f"⚠️ 车辆{sumo_id}生成失败（所有位置都冲突），将在下次更新时重试")
@@ -426,13 +426,13 @@ class SumoCarlaSync:
             logger.error(f"❌ 生成CARLA车辆{sumo_id}失败: {e}")
     
     def _update_carla_vehicle(self, sumo_id):
-        """更新CARLA车辆位置"""
+        """Update the CARLA vehicle position."""
         try:
             carla_vehicle = self.sumo_vehicles.get(sumo_id)
             if not carla_vehicle or not carla_vehicle.is_alive:
                 return
             
-            # 获取SUMO位置
+            # Get the SUMO position.
             sumo_pos = traci.vehicle.getPosition(sumo_id)
             sumo_angle = traci.vehicle.getAngle(sumo_id)
             
@@ -441,18 +441,18 @@ class SumoCarlaSync:
                 'rotation': sumo_angle
             }
             
-            # 转换到CARLA坐标
+            # Convert to CARLA coordinates.
             extent = carla.Vector3D(2.5, 1.0, 0.75)
             carla_transform = BridgeHelper.get_carla_transform(sumo_transform, extent)
             
-            # 更新CARLA车辆位置
+            # Update the CARLA vehicle position.
             carla_vehicle.set_transform(carla_transform)
             
         except Exception as e:
             logger.warning(f"更新CARLA车辆{sumo_id}失败: {e}")
     
     def _remove_carla_vehicle(self, sumo_id):
-        """当车辆不再在SUMO中时移除CARLA车辆"""
+        """Remove the CARLA vehicle when it no longer exists in SUMO."""
         try:
             carla_vehicle = self.sumo_vehicles.get(sumo_id)
             if carla_vehicle and carla_vehicle.is_alive:
@@ -465,82 +465,82 @@ class SumoCarlaSync:
             logger.warning(f"移除CARLA车辆{sumo_id}失败: {e}")
     
     def _sync_carla_to_sumo(self):
-        """将CARLA ego车辆同步到SUMO"""
+        """Synchronize the CARLA ego vehicle to SUMO."""
         if not self.ego_vehicle:
             return
             
         try:
-            # 检查ego是否存在于SUMO
+            # Check whether the ego vehicle exists in SUMO.
             sumo_vehicles = traci.vehicle.getIDList()
             if self.ego_sumo_id not in sumo_vehicles:
                 self._add_ego_to_sumo()
                 return
             
-            # 获取CARLA ego位置和速度
+            # Get the CARLA ego position and velocity.
             carla_transform = self.ego_vehicle.get_transform()
             carla_velocity = self.ego_vehicle.get_velocity()
             speed = (carla_velocity.x**2 + carla_velocity.y**2 + carla_velocity.z**2)**0.5
             
             extent = carla.Vector3D(2.5, 1.0, 0.75)
             
-            # 转换到SUMO坐标
+            # Convert to SUMO coordinates.
             sumo_transform = BridgeHelper.get_sumo_transform(carla_transform, extent)
             sumo_x, sumo_y = sumo_transform['location'][:2]
             sumo_angle = sumo_transform['rotation']
             
-            # 先设置速度，避免急刹车警告 - 忽略错误
+            # Set speed first to avoid hard-braking warnings; ignore errors.
             try:
                 traci.vehicle.setSpeed(self.ego_sumo_id, speed)
             except Exception:
                 pass
             
-            # 使用moveToXY更新SUMO ego位置 - 完全自由移动模式，忽略所有错误
+            # Update SUMO ego position with unrestricted moveToXY, ignoring errors.
             try:
                 traci.vehicle.moveToXY(
                     vehID=self.ego_sumo_id,
-                    edgeID='',  # 让SUMO确定边缘
-                    lane=-1,    # 让SUMO确定车道
+                    edgeID='',  # Let SUMO determine the edge.
+                    lane=-1,    # Let SUMO determine the lane.
                     x=sumo_x,
                     y=sumo_y,
                     angle=sumo_angle,
-                    keepRoute=2  # 即使偏离路线也保持车辆
+                    keepRoute=2  # Keep the vehicle even when it leaves the route.
                 )
             except Exception:
-                pass  # 完全忽略ego车辆位置更新错误（如偏离路网）
+                pass  # Ignore ego-position update errors, including leaving the road network.
             
-            # 强化ego车辆设置 - 完全自由移动，无边界限制，忽略所有警告
+            # Enforce unrestricted ego movement and ignore warnings.
             try:
-                # 禁用所有安全和边界检查
-                traci.vehicle.setSpeedMode(self.ego_sumo_id, 0)  # 禁用所有速度安全检查
-                traci.vehicle.setLaneChangeMode(self.ego_sumo_id, 0)  # 禁用变道检查
+                # Disable safety and boundary checks.
+                traci.vehicle.setSpeedMode(self.ego_sumo_id, 0)  # Disable all speed-safety checks.
+                traci.vehicle.setLaneChangeMode(self.ego_sumo_id, 0)  # Disable lane-change checks.
                 
-                # 设置高优先级，防止被其他车辆影响
-                traci.vehicle.setMinGap(self.ego_sumo_id, 0)  # 最小间隙为0
-                traci.vehicle.setTau(self.ego_sumo_id, 0.1)  # 最小反应时间
+                # Set high priority to avoid interference from other vehicles.
+                traci.vehicle.setMinGap(self.ego_sumo_id, 0)  # Set the minimum gap to zero.
+                traci.vehicle.setTau(self.ego_sumo_id, 0.1)  # Minimum reaction time
                 
-                # 完全忽略车辆是否在路网中
-                # isOnRoad检查被移除，让ego完全自由移动
+                # Ignore whether the vehicle is inside the road network.
+                # Remove the isOnRoad check to allow unrestricted ego movement.
                     
             except Exception:
-                pass  # 完全忽略所有ego设置错误
+                pass  # Ignore all ego-configuration errors.
             
         except Exception:
-            pass  # 完全忽略CARLA→SUMO同步错误
+            pass  # Ignore all CARLA-to-SUMO synchronization errors.
     
     def _sync_traffic_lights(self):
-        """同步交通信号灯：20秒绿灯/20秒红灯循环"""
+        """Synchronize traffic lights: 20 seconds green, then 20 seconds red."""
         try:
             if not self.cycle_start_time:
                 return
                 
-            # 计算周期位置
+            # Calculate position within the cycle.
             elapsed = time.time() - self.cycle_start_time
             cycle_position = elapsed % self.traffic_cycle_time
             
-            # 确定阶段：0-20秒 = 绿灯，20-40秒 = 红灯
+            # Determine phase: 0-20 seconds green; 20-40 seconds red.
             is_green_phase = cycle_position < self.green_time
             
-            # 获取所有交通信号灯
+            # Get all traffic lights.
             traffic_lights = self.carla_world.get_actors().filter('traffic.traffic_light')
             
             for tl in traffic_lights:
@@ -549,23 +549,23 @@ class SumoCarlaSync:
                 else:
                     tl.set_state(carla.TrafficLightState.Red)
             
-            # 通过TraCI同步SUMO交通信号灯
+            # Synchronize SUMO traffic lights through TraCI.
             tl_ids = traci.trafficlight.getIDList()
             for tl_id in tl_ids:
                 if is_green_phase:
-                    # 设置所有阶段为绿灯（简化版）
+                    # Set all signal states to green (simplified).
                     current_program = traci.trafficlight.getProgram(tl_id)
                     phases = traci.trafficlight.getAllProgramLogics(tl_id)[0].phases
                     if phases:
-                        # 创建绿灯阶段
+                        # Create the green phase.
                         green_state = 'G' * len(phases[0].state)
                         traci.trafficlight.setRedYellowGreenState(tl_id, green_state)
                 else:
-                    # 设置所有阶段为红灯
+                    # Set all signal states to red.
                     current_program = traci.trafficlight.getProgram(tl_id)
                     phases = traci.trafficlight.getAllProgramLogics(tl_id)[0].phases
                     if phases:
-                        # 创建红灯阶段
+                        # Create the red phase.
                         red_state = 'r' * len(phases[0].state)
                         traci.trafficlight.setRedYellowGreenState(tl_id, red_state)
             
@@ -573,13 +573,13 @@ class SumoCarlaSync:
             logger.warning(f"交通信号灯同步错误: {e}")
     
     def _initialize_data_recording(self):
-        """初始化SUMO车辆数据记录CSV文件"""
+        """Initialize the SUMO vehicle CSV log."""
         try:
-            # 创建带时间戳的文件名
+            # Create a timestamped filename.
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             filename = f"sumo_vehicles_data_{timestamp}.csv"
             
-            # 创建data_collected文件夹（如果不存在）
+            # Create data_collected if it does not exist.
             data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data_collected')
             os.makedirs(data_dir, exist_ok=True)
             
@@ -587,7 +587,7 @@ class SumoCarlaSync:
             self.vehicle_data_file = open(self.vehicle_data_file_path, 'w', newline='', encoding='utf-8')
             self.vehicle_data_writer = csv.writer(self.vehicle_data_file)
             
-            # 写入CSV头部
+            # Write the CSV header.
             header = [
                 'timestamp_ms', 'vehicle_id', 'x', 'y', 'yaw', 
                 'speed_mps', 'acceleration_mps2', 'lane_id', 'edge_id'
@@ -602,13 +602,13 @@ class SumoCarlaSync:
             self.vehicle_data_file = None
     
     def _record_vehicle_data(self):
-        """记录SUMO车辆数据到CSV文件 - 10Hz频率"""
+        """Log SUMO vehicle data to CSV at 10 Hz."""
         if not self.vehicle_data_writer:
             return
             
         current_time = time.time()
         
-        # 检查是否到了记录时间 (10Hz)
+        # Check the 10 Hz logging schedule.
         if current_time - self.last_data_record_time < self.data_recording_interval:
             return
             
@@ -616,28 +616,28 @@ class SumoCarlaSync:
             timestamp_ms = int(current_time * 1000)
             sumo_vehicles = traci.vehicle.getIDList()
             
-            # 排除ego车辆，只记录其他车辆
+            # Log only non-ego vehicles.
             other_vehicles = [vid for vid in sumo_vehicles if vid != self.ego_sumo_id]
             
             for vehicle_id in other_vehicles:
                 try:
-                    # 获取车辆基本信息
+                    # Get basic vehicle information.
                     position = traci.vehicle.getPosition(vehicle_id)
                     angle = traci.vehicle.getAngle(vehicle_id)
                     speed = traci.vehicle.getSpeed(vehicle_id)  # m/s
                     lane_id = traci.vehicle.getLaneID(vehicle_id)
                     edge_id = traci.vehicle.getRoadID(vehicle_id)
                     
-                    # 计算加速度（基于前一帧的速度差）
+                    # Calculate acceleration from the previous-frame velocity difference.
                     acceleration = 0.0
                     if vehicle_id in self.previous_vehicle_data:
                         prev_speed = self.previous_vehicle_data[vehicle_id]['speed']
                         acceleration = (speed - prev_speed) / self.data_recording_interval
                     
-                    # 保存当前数据用于下次计算加速度
+                    # Keep current data for the next acceleration calculation.
                     self.previous_vehicle_data[vehicle_id] = {'speed': speed}
                     
-                    # 写入CSV
+                    # Write to CSV.
                     row = [
                         timestamp_ms, vehicle_id, 
                         round(position[0], 3), round(position[1], 3), 
@@ -647,11 +647,11 @@ class SumoCarlaSync:
                     self.vehicle_data_writer.writerow(row)
                     
                 except Exception as vehicle_error:
-                    # 单个车辆错误不影响其他车辆记录
+                    # An error for one vehicle must not interrupt logging of others.
                     logger.debug(f"记录车辆 {vehicle_id} 数据失败: {vehicle_error}")
                     continue
             
-            # 清理不再存在的车辆的历史数据
+            # Remove history for vehicles that no longer exist.
             existing_vehicles = set(other_vehicles)
             self.previous_vehicle_data = {
                 vid: data for vid, data in self.previous_vehicle_data.items() 
@@ -661,7 +661,7 @@ class SumoCarlaSync:
             self.vehicle_data_file.flush()
             self.last_data_record_time = current_time
             
-            # 每5秒报告一次记录状态
+            # Report logging status every 5 seconds.
             if int(current_time) % 5 == 0 and len(other_vehicles) > 0:
                 logger.info(f"📊 已记录 {len(other_vehicles)} 辆SUMO车辆数据")
             
@@ -669,7 +669,7 @@ class SumoCarlaSync:
             logger.warning(f"记录车辆数据失败: {e}")
 
     def get_stats(self):
-        """获取基本同步统计信息"""
+        """Get basic synchronization statistics."""
         ego_in_sumo = False
         try:
             ego_in_sumo = self.ego_sumo_id in traci.vehicle.getIDList() if self.running else False
@@ -685,13 +685,13 @@ class SumoCarlaSync:
         }
     
     def cleanup(self):
-        """清理资源"""
+        """Clean up resources."""
         logger.info("🧹 清理同步...")
         
-        # 停止同步线程
+        # Stop the synchronization thread.
         self.stop_sync()
         
-        # 移除所有由SUMO生成的CARLA车辆
+        # Remove all CARLA vehicles spawned by SUMO.
         for sumo_id, carla_vehicle in list(self.sumo_vehicles.items()):
             try:
                 if carla_vehicle.is_alive:
@@ -700,11 +700,11 @@ class SumoCarlaSync:
                 pass
         self.sumo_vehicles.clear()
         
-        # 关闭SUMO
+        # Close SUMO.
         if self.sumo_sim:
             self.sumo_sim.close()
         
-        # 关闭CSV数据文件
+        # Close the CSV log.
         if self.vehicle_data_file:
             try:
                 self.vehicle_data_file.close()
@@ -716,7 +716,7 @@ class SumoCarlaSync:
 
 
 def main():
-    """主函数 - 独立运行SUMO-CARLA同步"""
+    """Run standalone SUMO-CARLA synchronization."""
     parser = argparse.ArgumentParser(description='CARLA-SUMO 20Hz双向同步系统')
     parser.add_argument('--carla-host', default='localhost', help='CARLA服务器地址')
     parser.add_argument('--carla-port', type=int, default=2000, help='CARLA端口')
@@ -725,12 +725,12 @@ def main():
     
     args = parser.parse_args()
     
-    # 创建同步系统
+    # Create the synchronization system.
     sync = SumoCarlaSync(carla_host=args.carla_host, carla_port=args.carla_port)
     sync.lateral_shift = args.lateral_shift
     
     try:
-        # 初始化
+        # Initialize.
         logger.info("🎆 CARLA-SUMO 20Hz双向同步系统")
         logger.info("=" * 50)
         
@@ -738,13 +738,13 @@ def main():
             logger.error("初始化失败")
             return 1
         
-        # 查找或等待ego车辆
+        # Find or wait for the ego vehicle.
         logger.info("正在查找ego车辆...")
         while not sync.find_ego_vehicle():
             logger.info("未找到车辆，请在CARLA中生成一辆车辆...")
             time.sleep(5)
         
-        # 启动同步
+        # Start synchronization.
         if not sync.start_sync():
             logger.error("同步启动失败")
             return 1
@@ -758,7 +758,7 @@ def main():
         logger.info("- 按Ctrl+C停止")
         logger.info("=" * 50)
         
-        # 运行主循环
+        # Run the main loop.
         start_time = time.time()
         last_stats_time = start_time
         
@@ -766,14 +766,14 @@ def main():
             while True:
                 time.sleep(1.0)
                 
-                # 每10秒显示统计信息
+                # Display statistics every 10 seconds.
                 current_time = time.time()
                 if current_time - last_stats_time >= 10.0:
                     stats = sync.get_stats()
                     logger.info(f"📊 统计: SUMO车辆={stats['sumo_vehicles']}, Ego在SUMO={'✅' if stats['ego_in_sumo'] else '❌'}")
                     last_stats_time = current_time
                 
-                # 检查时间限制
+                # Check the time limit.
                 if args.duration is not None:
                     elapsed = current_time - start_time
                     if elapsed >= args.duration:

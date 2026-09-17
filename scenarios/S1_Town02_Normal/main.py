@@ -1,6 +1,6 @@
 """
 CARLA Multi-Sensor System - Main Application
-主应用程序
+Main application
 Author: VLA-Workzone
 Date: Aug 3, 2025
 """
@@ -14,22 +14,22 @@ import pygame
 import traceback
 import warnings
 
-# 抑制所有warnings（包括SUMO的TraCI warnings）
+# Suppress warnings, including SUMO TraCI warnings.
 warnings.filterwarnings('ignore')
 
-# 导入模块 - 全部使用Clean版本
+# Import the clean module variants.
 from sensor_data_collection_clean import (
     CoreConfig, DataManager, SensorManager, FirstPersonHUD
 )
 from vehicle_controller import VehicleController
 from driving_ui import DrivingUI
-# from gaze_tracker_v2 import GazeTrackerV2  # 暂时禁用
+# from gaze_tracker_v2 import GazeTrackerV2  # Temporarily disabled
 from ui_recorder import UIRecorderManager
-from standalone_eye_tracking import StandaloneEyeTracker  # 独立眼动追踪
-from segmentation_collector import SegmentationDataCollector  # 语义分割数据采集器
+from standalone_eye_tracking import StandaloneEyeTracker  # Standalone eye tracking
+from segmentation_collector import SegmentationDataCollector  # Semantic-segmentation collector
 import threading
 
-# 添加SUMO集成路径
+# Add the SUMO integration path.
 import sys
 import os
 sumo_path = os.path.join(os.path.dirname(__file__), 'SUMO')
@@ -38,8 +38,8 @@ if sumo_path not in sys.path:
 
 from main_sumo_sync import SumoCarlaSync
 
-# 可选性能监控 - 只在需要时启用
-ENABLE_PERFORMANCE_MONITORING = False  # 设为True启用性能监控
+# Optional performance monitoring; enable only when needed.
+ENABLE_PERFORMANCE_MONITORING = False  # Set True to enable performance monitoring.
 
 if ENABLE_PERFORMANCE_MONITORING:
     try:
@@ -52,9 +52,9 @@ else:
 
 
 class CarlaSystem:
-    """CARLA系统主类 - 第一视角版本"""
+    """Main CARLA system with first-person view"""
     def __init__(self, target_fps=35):
-        """构造函数：设置默认属性并初始化 pygame。"""
+        """Set default attributes and initialize pygame."""
         self.client = None
         self.world = None
         self.vehicle = None
@@ -64,43 +64,43 @@ class CarlaSystem:
         self.hud = None
         self.driving_ui = None
         self.gaze_tracker = None
-        self.gaze_enabled = True  # 控制眼动追踪开关
-        self.ui_recorder = None   # UI录制器
+        self.gaze_enabled = True  # Eye-tracking enable switch
+        self.ui_recorder = None   # UI recorder
         self.running = False
         self.clock = pygame.time.Clock()
         self.target_fps = int(target_fps)
         
-        # 眼动追踪配置
-        self.enable_gaze_tracking = True  # 可通过参数控制
+        # Eye-tracking configuration
+        self.enable_gaze_tracking = True  # Configurable through arguments
         self.carla_frame_id = 0
         
-        # 独立眼动追踪器
+        # Standalone eye tracker
         self.standalone_gaze_tracker = None
         
-        # SUMO协同仿真配置
-        self.enable_sumo_cosim = True  # 可通过参数控制
+        # SUMO co-simulation configuration
+        self.enable_sumo_cosim = True  # Configurable through arguments
         self.sumo_manager = None
 
-        # 初始化 pygame
+        # Initialize pygame.
         pygame.init()
         pygame.font.init()
     
     def initialize(self):
-        """初始化系统"""
+        """Initialize the system."""
         print("🔗 连接CARLA服务器...")
         self.client = carla.Client('localhost', 2000)
         self.client.set_timeout(10.0)
         
         self.world = self.client.get_world()
         
-        # 设置CARLA世界为异步模式
+        # Set the CARLA world to asynchronous mode.
         settings = self.world.get_settings()
         settings.synchronous_mode = False
-        settings.fixed_delta_seconds = None  # 完全移除时间控制以进入异步模式
-        settings.no_rendering_mode = False  # 确保渲染开启
+        settings.fixed_delta_seconds = None  # Remove fixed timing constraints for asynchronous mode.
+        settings.no_rendering_mode = False  # Ensure rendering is enabled.
         self.world.apply_settings(settings)
 
-        # 设置交通管理器为异步模式
+        # Set Traffic Manager to asynchronous mode.
         try:
             traffic_manager = self.client.get_trafficmanager()
             traffic_manager.set_synchronous_mode(False)
@@ -108,20 +108,20 @@ class CarlaSystem:
         except Exception as e:
             print(f"⚠️ 交通管理器异步模式设置失败: {e}")
         
-        # 显示CARLA版本信息
+        # Display CARLA version information.
         try:
             version = self.client.get_client_version()
             print(f"✅ 已连接到CARLA {version}")
         except:
             print("✅ 已连接到CARLA")
         
-        # 生成车辆
+        # Spawn the vehicle.
         self._spawn_vehicle()
         
-        # 初始化第一视角UI
+        # Initialize the first-person UI.
         self.hud = FirstPersonHUD(CoreConfig.HUD_WIDTH, CoreConfig.HUD_HEIGHT)
         
-        # 工作区警告图片路径
+        # Work-zone warning image path
         warning_image_path = os.path.join(os.path.dirname(__file__), 'work_zone_warning.png')
         
         self.driving_ui = DrivingUI(
@@ -132,15 +132,15 @@ class CarlaSystem:
             warning_image_path=warning_image_path
         )
         
-        # 添加工作区（Unreal Editor坐标转CARLA坐标：除以100）
-        # Unreal: 左上角(-70, 13000) 右下角(-980, 11500) (cm)
+        # Add work zones; divide Unreal Editor coordinates by 100 for CARLA.
+        # Unreal: upper-left (-70,13000), lower-right (-980,11500), in cm
         # CARLA: X=-9.8~-0.7 (m), Y=115~130 (m)
         self.driving_ui.add_work_zone(min_x=-9.8, min_y=115.0, max_x=-0.7, max_y=130.0)
         
-        # 注册世界tick事件 - 重要：用于FPS计算
+        # Register the world-tick callback for FPS calculation.
         self.world.on_tick(self.hud.on_world_tick)
         
-        # 初始化组件（使用修正的clean版本）
+        # Initialize components using the corrected clean variants.
         import datetime
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         save_path = f"./data_collected/carla_data_{timestamp}"
@@ -148,40 +148,40 @@ class CarlaSystem:
         self.sensor_manager = SensorManager(self.world, self.vehicle, self.data_manager)
         self.controller = VehicleController(self.vehicle)
         
-        # 传感器在SensorManager初始化时自动设置
+        # Sensors are configured automatically by SensorManager.
         print("✅ All components initialized with clean sensor configuration")
         
-        # 初始化独立眼动追踪器（如果启用）- 完全异步，不阻塞
+        # Initialize the optional eye tracker asynchronously without blocking.
         if self.enable_gaze_tracking:
             self._initialize_standalone_gaze_tracker(save_path)
         
-        # 可选性能监控
+        # Optional performance monitoring
         if PERF_MONITOR_AVAILABLE:
             self.performance_monitor = get_performance_monitor()
             start_performance_reporting(15)
         else:
             self.performance_monitor = None
         
-        # 初始化UI录制器
+        # Initialize the UI recorder.
         self.ui_recorder = UIRecorderManager(data_manager=self.data_manager)
         
-        # 初始化语义分割数据采集器 - 10Hz频率与driving UI对齐
+        # Initialize segmentation collection at 10 Hz, aligned with the driving UI.
         self.segmentation_collector = SegmentationDataCollector(
             self.vehicle, 
             self.world,
             save_path
         )
         
-        # 自动启动UI录制
+        # Start UI recording automatically.
         if self.ui_recorder.toggle_recording():
             print("✅ UI录制器已自动启动")
         else:
             print("⚠️ UI录制器启动失败")
         
-        # 显示控制信息
+        # Display control instructions.
         self._show_control_info()
         
-        # 初始化SUMO协同仿真
+        # Initialize SUMO co-simulation.
         self._initialize_sumo_cosimulation()
         
         print("✅ 系统初始化完成 - 35fps稳定版 + 10Hz UI录制 + SUMO双向同步")
@@ -190,10 +190,10 @@ class CarlaSystem:
         print(f"🎮 快捷键: TAB(驾驶) ESC(退出) G(眼动) F1(眼动统计) F2(性能统计-{perf_status}) F3(SUMO统计-{sumo_status})\n")
     
     def _spawn_vehicle(self):
-        """生成车辆"""
+        """Spawn the vehicle."""
         blueprint_library = self.world.get_blueprint_library()
         
-        # 选择特定的车辆模型
+        # Select the vehicle model.
         try:
             vehicle_bp = blueprint_library.find('vehicle.lincoln.mkz_2020')
             print("🚗 使用Lincoln MKZ 2020")
@@ -201,19 +201,19 @@ class CarlaSystem:
             vehicle_bp = blueprint_library.filter('vehicle.*')[0]
             print(f"🚗 使用默认车辆: {vehicle_bp.id}")
         
-        # 设置车辆属性
+        # Set vehicle attributes.
         if vehicle_bp.has_attribute('color'):
             color = vehicle_bp.get_attribute('color').recommended_values[0]
             vehicle_bp.set_attribute('color', color)
         
-        # 设置role_name为hero，让SUMO能找到这个ego车辆
+        # Set role_name to hero so SUMO can identify the ego vehicle.
         if vehicle_bp.has_attribute('role_name'):
             vehicle_bp.set_attribute('role_name', 'hero')
         
-        # 获取地图的spawn points
+        # Get map spawn points.
         spawn_points = self.world.get_map().get_spawn_points()
         
-        # 🎯 尝试找到最接近目标位置 (6210, 30670) 的spawn point
+        # Find the spawn point closest to (6210, 30670).
         target_location = carla.Location(x=6210.0, y=30670.0)
         closest_spawn = min(spawn_points, 
                            key=lambda sp: sp.location.distance(target_location))
@@ -231,7 +231,7 @@ class CarlaSystem:
             print(f"❌ 生成失败: {e}")
             print("⚠️ 尝试使用其他生成点...")
             
-            # 备用方案：尝试其他spawn points
+            # Fallback: try other spawn points.
             vehicle_spawned = False
             for i, sp in enumerate(spawn_points):
                 try:
@@ -246,17 +246,17 @@ class CarlaSystem:
                 raise RuntimeError("无法在任何位置生成车辆")
     
     def run(self, control_mode='auto'):
-        """运行系统 - 优化FPS性能"""
+        """Run the system with FPS optimizations."""
         self.running = True
         
-        # 设置pygame显示 - 移除FPS限制以获得最大性能
+        # Configure pygame display without an FPS cap for maximum performance.
         display = pygame.display.set_mode(
             (CoreConfig.HUD_WIDTH, CoreConfig.HUD_HEIGHT),
             pygame.HWSURFACE | pygame.DOUBLEBUF
         )
         pygame.display.set_caption("CARLA High-Precision Multi-Sensor System - Unlimited Performance")
         
-        # 设置控制模式
+        # Set the control mode.
         if control_mode == 'auto':
             self.controller.set_autopilot(True)
             print("🤖 自动驾驶模式")
@@ -264,9 +264,9 @@ class CarlaSystem:
             self.controller.set_autopilot(False)
             print("🎮 手动控制模式")
         
-        # 启动SUMO协同仿真
+        # Start SUMO co-simulation.
         if self.sumo_manager:
-            # 首先设置ego vehicle（必须在start_sync之前）
+            # Set the ego vehicle before calling start_sync.
             if self.controller and self.controller.vehicle:
                 self.sumo_manager.set_ego_vehicle(self.controller.vehicle)
                 print("✅ Ego vehicle已设置到SUMO同步器")
@@ -276,7 +276,7 @@ class CarlaSystem:
                     print("❌ 无法找到ego vehicle，SUMO同步将无法启动")
                     self.sumo_manager = None
             
-            # 然后启动同步（ego_vehicle已设置）
+            # Start synchronization after setting ego_vehicle.
             if self.sumo_manager and self.sumo_manager.start_sync():
                 print("🚦 SUMO协同仿真已启动 - SUMO车辆现在能感知到你的车辆")
             else:
@@ -285,14 +285,14 @@ class CarlaSystem:
         
         try:
             while self.running:
-                # 条件性性能监控
+                # Conditional performance monitoring
                 if self.performance_monitor:
                     self.performance_monitor.start_frame()
                 
-                # 异步模式：不要手动 tick 服务器，服务器自主推进
-                # 如果你需要强制同步，请改回手动 tick
+                # In asynchronous mode, the server advances without manual ticks.
+                # Restore manual ticking if synchronized stepping is required.
                 
-                # 处理pygame事件
+                # Process pygame events.
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         self.running = False
@@ -303,8 +303,8 @@ class CarlaSystem:
                             self._respawn_vehicle()
                         elif event.key == pygame.K_TAB:
                             self.controller.set_autopilot(not self.controller.autopilot)
-                            # mode_text = "自动驾驶" if self.controller.autopilot else "手动控制"
-                            # print(f"🔄 切换到: {mode_text}")
+                            # mode_text = "Autopilot" if self.controller.autopilot else "Manual control"
+                            # print(f"Switched to: {mode_text}")
                         elif event.key == pygame.K_h:
                             self.hud.toggle_info()
                         elif event.key == pygame.K_i:
@@ -322,26 +322,26 @@ class CarlaSystem:
 
 
                 
-                # 更新控制
+                # Update controls.
                 self.controller.update()
                 
-                # 获取车辆状态数据
+                # Get vehicle-state data.
                 world_data = {
                     'vehicle': self.vehicle,
                     'stats': self._get_vehicle_stats()
                 }
                 
-                # 眼动追踪已禁用
+                # Eye tracking is disabled.
                 # if self.gaze_tracker:
                 #     world_data['gaze_enabled'] = True
                 
-                # 更新HUD
+                # Update the HUD.
                 self.hud.tick(world_data, self.clock)
                 
-                # 处理眼动追踪数据（已禁用）
+                # Process eye-tracking data (disabled).
                 # self._process_gaze_data()
                 
-                # 记录车辆数据到CSV
+                # Write vehicle data to CSV.
                 if self.data_manager and self.vehicle:
                     control = self.vehicle.get_control()
                     self.data_manager.log_vehicle_data(
@@ -351,28 +351,28 @@ class CarlaSystem:
                         self.clock.get_fps()
                     )
                 
-                # 更新CARLA frame ID
+                # Update the CARLA frame ID.
                 self.carla_frame_id += 1
                 
-                # 可选：每隔一段时间输出SUMO状态（不影响性能）
-                if self.sumo_manager and self.carla_frame_id % 350 == 0:  # 每10秒
+                # Optionally report SUMO status periodically without affecting performance.
+                if self.sumo_manager and self.carla_frame_id % 350 == 0:  # Every 10 seconds
                     self._log_sumo_status()
                 
-                # 渲染性能监控
+                # Monitor rendering performance.
                 if self.performance_monitor:
                     self.performance_monitor.start_render()
                 
-                # 渲染驾驶UI（包含主视角、后视镜、速度显示）
+                # Render the driving UI: main view, mirror, and speed display.
                 self.driving_ui.render(display)
                 
-                # 渲染HUD覆盖层
+                # Render the HUD overlay.
                 self.hud.render(display)
                 
-                # 结束渲染性能监控
+                # Finish rendering-performance monitoring.
                 if self.performance_monitor:
                     self.performance_monitor.end_render()
                 
-                # 🎬 自动捕获UI帧 (10Hz超低频率) - 在display.flip()之前
+                # Capture UI frames at 10 Hz before display.flip().
                 if self.ui_recorder:
                     if self.performance_monitor:
                         self.performance_monitor.start_ui_capture()
@@ -383,18 +383,18 @@ class CarlaSystem:
                     if self.performance_monitor:
                         self.performance_monitor.end_ui_capture()
                         
-                        # 更新UI录制状态
+                        # Update UI recording status.
                         ui_stats = self.ui_recorder.get_stats()
                         self.performance_monitor.update_ui_status(
                             ui_stats['recording'],
                             ui_stats['queue_size']
                         )
                 
-                # 更新显示 - 使用目标客户端FPS（不等于服务器实际FPS）
+                # Update the display at the target client FPS, not the server FPS.
                 pygame.display.flip()
                 self.clock.tick(self.target_fps)
                 
-                # 结束帧性能监控
+                # Finish frame-performance monitoring.
                 if self.performance_monitor:
                     self.performance_monitor.end_frame()
                 
@@ -428,20 +428,20 @@ class CarlaSystem:
             self._cleanup()
     
     def _get_vehicle_stats(self):
-        """获取车辆状态数据"""
+        """Get vehicle-state data."""
         if not self.vehicle:
             return {}
         
-        # 获取车辆状态
+        # Get vehicle state.
         velocity = self.vehicle.get_velocity()
         speed = 3.6 * (velocity.x**2 + velocity.y**2 + velocity.z**2)**0.5  # km/h
         
         location = self.vehicle.get_location()
         
-        # 获取数据管理器统计信息（包括性能监控）
+        # Get data-manager statistics, including performance monitoring.
         stats = self.data_manager.get_stats() if self.data_manager else {}
         
-        # 添加车辆特定数据
+        # Add vehicle-specific data.
         stats.update({
             'autopilot': self.controller.autopilot if self.controller else False,
             'speed': speed,
@@ -450,12 +450,12 @@ class CarlaSystem:
             'z': location.z
         })
         
-        # 眼动追踪统计（简化版无详细统计）
+        # Simplified eye-tracking statistics without detailed counters
         if self.gaze_tracker:
             stats['gaze_tracking'] = True
             stats['gaze_samples'] = getattr(self.gaze_tracker, 'samples_collected', 0)
         
-        # UI录制统计
+        # UI recording statistics
         if self.ui_recorder:
             ui_stats = self.ui_recorder.get_stats()
             stats['ui_recording'] = ui_stats['recording']
@@ -464,30 +464,30 @@ class CarlaSystem:
         return stats
     
     def _respawn_vehicle(self):
-        """重生车辆"""
+        """Respawn the vehicle."""
         print("🔄 重生车辆...")
         spawn_points = self.world.get_map().get_spawn_points()
         spawn_point = spawn_points[np.random.randint(len(spawn_points))]
         self.vehicle.set_transform(spawn_point)
     
     def _initialize_gaze_tracking(self):
-        """初始化眼动追踪系统 - 暂时禁用"""
+        """Initialize eye tracking (temporarily disabled)."""
         print("⚠️ 眼动追踪已禁用（待修复）")
         self.gaze_tracker = None
         return
     
     def _initialize_standalone_gaze_tracker(self, save_path: str):
         """
-        初始化独立眼动追踪器（完全异步，独立文件夹）
+        Initialize the standalone eye tracker asynchronously with a separate folder.
         
         Args:
-            save_path: 主数据保存路径
+            save_path: Main data output path
         """
         def async_init_and_start():
-            """在后台线程中初始化和启动"""
+            """Initialize and start in a background thread."""
             try:
-                # 创建独立的 gaze 文件夹（避免 I/O 竞争）
-                # 提取时间戳
+                # Create a separate gaze folder to avoid I/O contention.
+                # Extract the timestamp.
                 import re
                 import datetime
                 timestamp_match = re.search(r'carla_data_(.+)$', save_path)
@@ -498,7 +498,7 @@ class CarlaSystem:
                         f"gaze_data_{timestamp}"
                     )
                 else:
-                    # 备选方案
+                    # Fallback option
                     gaze_dir = os.path.join(
                         os.path.join(os.path.dirname(__file__), 'gaze_data'),
                         "gaze_data_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -506,12 +506,12 @@ class CarlaSystem:
                 
                 print(f"[眼动追踪] 数据将保存到: {gaze_dir}")
                 
-                # 创建追踪器实例
+                # Create the tracker instance.
                 tracker = StandaloneEyeTracker(output_dir=gaze_dir)
                 
-                # 初始化（这一步可能耗时150ms）
+                # Initialize; this may take 150 ms.
                 if tracker.initialize():
-                    # 启动采集
+                    # Start acquisition.
                     tracker.start()
                     self.standalone_gaze_tracker = tracker
                     print("[眼动追踪] ✅ 后台启动成功")
@@ -523,7 +523,7 @@ class CarlaSystem:
                 import traceback
                 traceback.print_exc()
         
-        # 在独立线程中执行所有初始化和启动
+        # Run initialization and startup in a separate thread.
         init_thread = threading.Thread(
             target=async_init_and_start,
             daemon=True,
@@ -534,11 +534,11 @@ class CarlaSystem:
         print("[眼动追踪] ⚡ 已触发后台初始化（不阻塞主程序）")
     
     def _process_gaze_data(self):
-        """处理眼动追踪数据 - 禁用"""
+        """Process eye-tracking data (disabled)."""
         return
     
     def get_gaze_stats(self) -> dict:
-        """获取眼动追踪统计信息 - 简化版"""
+        """Get simplified eye-tracking statistics."""
         if self.gaze_tracker:
             return {
                 'samples_collected': getattr(self.gaze_tracker, 'samples_collected', 0),
@@ -547,7 +547,7 @@ class CarlaSystem:
         return {}
     
     def toggle_gaze_tracking(self):
-        """切换眼动追踪开关 - 简化版"""
+        """Toggle eye tracking (simplified version)."""
         if self.gaze_tracker and self.gaze_tracker.running:
             self.gaze_tracker.stop()
             print("👁️ 眼动追踪已停止")
@@ -558,7 +558,7 @@ class CarlaSystem:
             print("⚠️ 眼动追踪器未初始化")
     
     def _show_gaze_stats(self):
-        """显示眼动追踪统计信息 - 简化版"""
+        """Display simplified eye-tracking statistics."""
         if not self.gaze_tracker:
             print("⚠️ 眼动追踪器未初始化")
             return
@@ -579,13 +579,13 @@ class CarlaSystem:
         print()
     
     def _show_stats(self):
-        """显示统计信息"""
+        """Display statistics."""
         frame_count = self.data_manager.frame_count
         queue_size = self.data_manager.save_queue.qsize()
         print(f"📊 帧数: {frame_count}, 队列: {queue_size}/{CoreConfig.QUEUE_SIZE} | 传感器: {CoreConfig.SENSOR_FREQUENCY}Hz, UI: {CoreConfig.UI_FREQUENCY}Hz")
     
     def _show_performance_stats(self):
-        """显示性能统计信息"""
+        """Display performance statistics."""
         if not self.performance_monitor:
             print("⚠️ 性能监控未启用 - 在main.py中设置ENABLE_PERFORMANCE_MONITORING=True")
             return
@@ -593,7 +593,7 @@ class CarlaSystem:
         print("\n" + "="*60)
         self.performance_monitor.print_stats()
         
-        # 性能影响分析
+        # Analyze performance impact.
         impact = self.performance_monitor.get_performance_impact()
         print(f"\n⚡ 性能影响分析:")
         print(f"   {impact['description']}")
@@ -611,7 +611,7 @@ class CarlaSystem:
     print()
     
     def _toggle_ui_recording(self):
-        """切换UI录制"""
+        """Toggle UI recording."""
         if not self.ui_recorder:
             print("⚠️ UI录制器未初始化")
             return
@@ -625,7 +625,7 @@ class CarlaSystem:
             print(f"🛑 UI录制已停止，共录制 {stats['frame_count']} 帧")
     
     def _show_ui_recording_stats(self):
-        """显示UI录制统计信息"""
+        """Display UI recording statistics."""
         if not self.ui_recorder:
             print("⚠️ UI录制器未初始化")
             return
@@ -639,15 +639,15 @@ class CarlaSystem:
         print(f"   分辨率缩放: {stats['quality_scale']}x")
         print(f"   保存路径: {stats['save_path']}")
         
-        # 计算预估文件大小
+        # Estimate file size.
         if stats['frame_count'] > 0:
-            # 估算每帧压缩后大小 ~50KB
+            # Assume approximately 50 KB per compressed frame.
             estimated_size = stats['frame_count'] * 50 / 1024  # MB
             print(f"   预估数据量: ~{estimated_size:.1f}MB")
         print()
     
     def _show_control_info(self):
-        """显示控制信息"""
+        """Display control instructions."""
         control_info = self.controller.get_control_info()
         
         if control_info['has_joystick']:
@@ -663,25 +663,25 @@ class CarlaSystem:
         print(f"🚗 当前模式: {'自动驾驶' if control_info['autopilot'] else '手动控制'}")
     
     def _cleanup(self):
-        """清理资源"""
+        """Clean up resources."""
         print("🧹 清理资源...")
         
-        # 停止独立眼动追踪器
+        # Stop the standalone eye tracker.
         if self.standalone_gaze_tracker:
             print("👁️ 停止眼动追踪...")
             self.standalone_gaze_tracker.stop()
         
-        # 首先停止SUMO协同仿真
+        # Stop SUMO co-simulation first.
         if self.sumo_manager:
             self.sumo_manager.stop_sync()
         
-        # 清理所有CARLA中的车辆（除了ego vehicle）
+        # Clean up CARLA vehicles other than the ego vehicle.
         try:
             print("🚗 清理CARLA中的所有车辆...")
             vehicle_list = self.world.get_actors().filter('vehicle.*')
             destroyed_count = 0
             for vehicle in vehicle_list:
-                if vehicle.id != self.vehicle.id:  # 不销毁ego vehicle，后面单独处理
+                if vehicle.id != self.vehicle.id:  # Handle ego-vehicle destruction separately below.
                     vehicle.destroy()
                     destroyed_count += 1
             if destroyed_count > 0:
@@ -689,7 +689,7 @@ class CarlaSystem:
         except Exception as e:
             print(f"⚠️ 清理车辆失败: {e}")
         
-        # 恢复为默认：异步（但固定小的 delta），将 fixed_delta_seconds 设为 0.0
+        # Restore asynchronous defaults; set fixed_delta_seconds to 0.0.
         try:
             settings = self.world.get_settings()
             settings.synchronous_mode = False
@@ -708,16 +708,16 @@ class CarlaSystem:
         if self.vehicle and self.vehicle.is_alive:
             self.vehicle.destroy()
         
-        # 停止眼动追踪（已禁用）
+        # Stop eye tracking (disabled).
         # if self.gaze_tracker:
         #     self.gaze_tracker.stop()
         
-        # 停止UI录制
+        # Stop UI recording.
         if self.ui_recorder:
             print("🛑 停止UI录制...")
             self.ui_recorder.cleanup()
         
-        # 停止语义分割数据采集 - 学习DrivingUI的模式
+        # Stop segmentation collection using the DrivingUI cleanup pattern.
         if self.segmentation_collector:
             self.segmentation_collector.destroy()
         
@@ -728,7 +728,7 @@ class CarlaSystem:
         print("✅ 清理完成")
     
     def _initialize_sumo_cosimulation(self):
-        """初始化SUMO协同仿真"""
+        """Initialize SUMO co-simulation."""
         if not self.enable_sumo_cosim:
             print("⚠️ SUMO协同仿真已禁用")
             return
@@ -736,14 +736,14 @@ class CarlaSystem:
         try:
             print("🚦 正在初始化SUMO协同仿真...")
             
-            # 创建SUMO协同仿真管理器
+            # Create the SUMO co-simulation manager.
             self.sumo_manager = SumoCarlaSync(
                 carla_host='localhost', 
                 carla_port=2000, 
                 use_gui=getattr(self, 'enable_sumo_gui', True)
             )
             
-            # 初始化
+            # Initialize.
             if self.sumo_manager.initialize():
                 print("✅ SUMO协同仿真初始化成功")
             else:
@@ -757,7 +757,7 @@ class CarlaSystem:
             self.sumo_manager = None
     
     def _show_sumo_stats(self):
-        """显示SUMO协同仿真统计信息"""
+        """Display SUMO co-simulation statistics."""
         if not self.sumo_manager:
             print("⚠️ SUMO协同仿真未初始化")
             return
@@ -777,7 +777,7 @@ class CarlaSystem:
         print()
     
     def _log_sumo_status(self):
-        """记录SUMO状态（用于调试）"""
+        """Log SUMO status for debugging."""
         if self.sumo_manager and self.sumo_manager.running:
             try:
                 stats = self.sumo_manager.get_stats()
@@ -785,15 +785,15 @@ class CarlaSystem:
                 print(f"🚦 SUMO: {ego_status} Ego车辆, "
                       f"SUMO车辆数 {stats.get('sumo_vehicles', 0)}")
             except Exception as e:
-                # SUMO可能已断开，静默处理
+                # SUMO may be disconnected; handle silently.
                 pass
 
 
 def main():
-    """主函数"""
+    """Main entry point."""
     import argparse
     
-    # 命令行参数解析
+    # Parse command-line arguments.
     parser = argparse.ArgumentParser(
         description='CARLA Multi-Sensor System with SUMO Co-Simulation',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -816,12 +816,12 @@ def main():
     
     args = parser.parse_args()
     
-    # 设置参数
+    # Set parameters.
     mode = "auto" if args.auto else "manual"
     enable_gui = args.sumo_gui
     enable_gaze = not args.no_gaze
     
-    # 显示配置
+    # Display configuration.
     print("🎯 CARLA Multi-Sensor System with SUMO Co-Simulation")
     print("🚀 Maximum Quality Configuration + 20Hz SUMO Sync")
     print("=" * 60)
@@ -830,7 +830,7 @@ def main():
     print(f"👁️  眼动追踪: {'启用' if enable_gaze else '禁用'}")
     print("=" * 60)
 
-    # 固定 client target FPS = 35
+    # Fix the target client FPS at 35.
     system = CarlaSystem(target_fps=35)
     system.enable_sumo_gui = enable_gui
     system.enable_gaze_tracking = enable_gaze
